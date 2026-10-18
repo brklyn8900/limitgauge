@@ -155,12 +155,12 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
 @Suite struct CredentialParsingTests {
     @Test func parsesClaudeCodeItem() throws {
         let data = Data("""
-        {"claudeAiOauth": {"accessToken": "sk-ant-oat01-test", "refreshToken": "r", "expiresAt": 1792302931241,
+        {"claudeAiOauth": {"accessToken": "sk-ant-oat01-test", "refreshToken": "r", "expiresAt": 4102444800241,
                            "scopes": ["user:inference"], "subscriptionType": "max"}}
         """.utf8)
         let token = try ClaudeCodeCredentials.parse(data)
         #expect(token.accessToken == "sk-ant-oat01-test")
-        #expect(token.expiresAt == Date(timeIntervalSince1970: 1792302931.241))
+        #expect(token.expiresAt == Date(timeIntervalSince1970: 4102444800.241))
         #expect(token.isExpired == false)
     }
 
