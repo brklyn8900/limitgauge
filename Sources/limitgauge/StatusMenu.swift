@@ -117,17 +117,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         updated.isEnabled = false
         menu.addItem(updated)
 
-        let refresh = NSMenuItem(title: "Refresh", action: #selector(refreshNow), keyEquivalent: "r")
-        refresh.target = self
-        refresh.isEnabled = !service.isRefreshing
-        menu.addItem(refresh)
+        menu.addItem(MenuRows.action("Refresh", enabled: !service.isRefreshing) { [weak self] in
+            self?.service.refresh()
+        })
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit limitgauge", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-    }
-
-    @objc private func refreshNow() {
-        service.refresh()
     }
 
     // MARK: Icon

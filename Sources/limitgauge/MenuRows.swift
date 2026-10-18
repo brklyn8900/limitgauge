@@ -73,6 +73,16 @@ enum MenuRows {
         return item(stack([l], spacing: 0))
     }
 
+    /// A clickable row that runs `handler` and keeps the menu open. Standard menu items
+    /// always dismiss the menu when they fire; a custom view does not.
+    static func action(_ title: String, enabled: Bool, handler: @escaping () -> Void) -> NSMenuItem {
+        let view = ActionRowView(title: title, enabled: enabled, handler: handler)
+        view.frame = NSRect(x: 0, y: 0, width: width, height: 22)
+        let item = NSMenuItem()
+        item.view = view
+        return item
+    }
+
     // MARK: Building blocks
 
     private static func label(_ text: String, font: NSFont) -> NSTextField {
@@ -112,6 +122,51 @@ enum MenuRows {
         item.view = view
         item.isEnabled = false
         return item
+    }
+}
+
+/// A menu row that acts on click without closing the menu.
+final class ActionRowView: NSView {
+    private let handler: () -> Void
+    private let enabled: Bool
+    private let title: NSTextField
+    private var hovered = false { didSet { needsDisplay = true } }
+
+    init(title: String, enabled: Bool, handler: @escaping () -> Void) {
+        self.handler = handler
+        self.enabled = enabled
+        self.title = NSTextField(labelWithString: title)
+        super.init(frame: .zero)
+        self.title.font = .menuFont(ofSize: 13)
+        self.title.textColor = enabled ? .labelColor : .disabledControlTextColor
+        self.title.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(self.title)
+        NSLayoutConstraint.activate([
+            self.title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            self.title.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = enabled }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    override func mouseUp(with event: NSEvent) {
+        guard enabled, bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        handler()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard hovered else { return }
+        NSColor.labelColor.withAlphaComponent(0.1).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 5, dy: 0), xRadius: 5, yRadius: 5).fill()
     }
 }
 
