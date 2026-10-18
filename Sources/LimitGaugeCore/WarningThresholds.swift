@@ -1,0 +1,33 @@
+import Foundation
+
+/// Per-limit warning thresholds in percent. Defaults from the proposal.
+public struct WarningThresholds: Equatable, Sendable, Codable {
+    public var session: Int
+    public var weeklyAll: Int
+    public var weeklyScoped: Int
+
+    public static let `default` = WarningThresholds(session: 80, weeklyAll: 85, weeklyScoped: 80)
+
+    public init(session: Int, weeklyAll: Int, weeklyScoped: Int) {
+        self.session = session
+        self.weeklyAll = weeklyAll
+        self.weeklyScoped = weeklyScoped
+    }
+
+    public func threshold(for kind: RateLimit.Kind) -> Int {
+        switch kind {
+        case .session: return session
+        case .weeklyAll: return weeklyAll
+        case .weeklyScoped: return weeklyScoped
+        case .other: return weeklyAll
+        }
+    }
+
+    public func isPast(_ limit: RateLimit) -> Bool {
+        limit.percent >= threshold(for: limit.kind)
+    }
+
+    public func anyPast(in snapshot: UsageSnapshot) -> Bool {
+        snapshot.limits.contains(where: isPast)
+    }
+}

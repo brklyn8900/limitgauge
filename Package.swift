@@ -10,6 +10,12 @@ let package = Package(
             name: "LimitGaugeCore",
             path: "Sources/LimitGaugeCore"
         ),
+        // The menu bar app.
+        .executableTarget(
+            name: "limitgauge",
+            dependencies: ["LimitGaugeCore"],
+            path: "Sources/limitgauge"
+        ),
         .testTarget(
             name: "LimitGaugeCoreTests",
             dependencies: ["LimitGaugeCore"],
