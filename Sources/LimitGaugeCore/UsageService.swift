@@ -15,7 +15,7 @@ public enum UsageProblem: Equatable, Sendable {
     public var message: String {
         switch self {
         case .noCredentials: return "Sign in with Claude Code to see usage."
-        case .keychainDenied: return "Keychain access was denied. Choose Always Allow when asked."
+        case .keychainDenied: return "Keychain read was refused. Unlock the login keychain and refresh."
         case .tokenRejected: return "Token expired. Run claude in a terminal to sign in again."
         case .offline: return "Could not reach the usage endpoint."
         case .server(let status): return "Usage endpoint returned \(status)."

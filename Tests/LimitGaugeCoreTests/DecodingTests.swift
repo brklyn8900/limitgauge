@@ -164,6 +164,14 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
         #expect(token.isExpired == false)
     }
 
+    @Test func securityExitCodesMapToErrors() {
+        #expect(ClaudeCodeCredentials.error(forExitCode: 0) == nil)
+        #expect(ClaudeCodeCredentials.error(forExitCode: 44) == .notFound)
+        #expect(ClaudeCodeCredentials.error(forExitCode: 36) == .accessDenied)
+        #expect(ClaudeCodeCredentials.error(forExitCode: 128) == .accessDenied)
+        #expect(ClaudeCodeCredentials.error(forExitCode: 1) == .security(exitCode: 1))
+    }
+
     @Test func missingTokenIsMalformed() {
         let data = Data(#"{"claudeAiOauth": {"refreshToken": "r"}}"#.utf8)
         #expect(throws: ClaudeCodeCredentials.Error.malformed) {
