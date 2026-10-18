@@ -91,14 +91,25 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         launch.target = self
         launch.action = #selector(launchChanged)
 
+        // Read from the bundle so the footer cannot drift from Info.plist.
+        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let version = NSTextField(labelWithString: "limitgauge \(shortVersion ?? "dev")")
+        version.font = .systemFont(ofSize: 11)
+        version.textColor = .tertiaryLabelColor
+        version.alignment = .right
+
         let content = NSView()
         grid.translatesAutoresizingMaskIntoConstraints = false
+        version.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(grid)
+        content.addSubview(version)
         NSLayoutConstraint.activate([
             grid.topAnchor.constraint(equalTo: content.topAnchor, constant: 20),
             grid.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 20),
             grid.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
-            grid.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
+            version.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 16),
+            version.trailingAnchor.constraint(equalTo: grid.trailingAnchor),
+            version.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
         ])
 
         let w = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
