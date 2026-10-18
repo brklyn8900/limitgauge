@@ -1,0 +1,5 @@
+{
+  "organization": {
+    "rate_limit_tier": "default_claude_max_5x"
+  }
+}
