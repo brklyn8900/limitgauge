@@ -10,7 +10,6 @@ enum Settings {
         case gaugeWithNeedle = "gauge.with.needle"
         case chartBarFill = "chart.bar.fill"
         case timer = "timer"
-        case anthropic = "anthropic"
 
         var title: String {
             switch self {
@@ -20,7 +19,6 @@ enum Settings {
             case .gaugeWithNeedle: return "Gauge"
             case .chartBarFill: return "Bars"
             case .timer: return "Timer"
-            case .anthropic: return "Anthropic mark"
             }
         }
     }
