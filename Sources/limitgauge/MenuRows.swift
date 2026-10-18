@@ -9,22 +9,35 @@ enum MenuRows {
 
     /// Title, percent, bar and reset time.
     static func limit(_ limit: RateLimit, now: Date, past: Bool) -> NSMenuItem {
-        let title = label(limit.title, font: .systemFont(ofSize: 13, weight: .medium))
-        let percent = label("\(limit.percent)%", font: .monospacedDigitSystemFont(ofSize: 13, weight: .medium))
-        percent.textColor = past ? .systemRed : .labelColor
-        let header = NSStackView(views: [title, NSView(), percent])
+        gauge(title: limit.title, percent: limit.percent, caption: ResetText.resets(at: limit.resetsAt, now: now), past: past)
+    }
+
+    /// The session row when the endpoint reports no session: no five-hour window is open,
+    /// so usage is zero and there is nothing to reset.
+    static func idleSession() -> NSMenuItem {
+        gauge(title: RateLimit.Kind.session.title, percent: 0, caption: nil, past: false)
+    }
+
+    private static func gauge(title: String, percent: Int, caption: String?, past: Bool) -> NSMenuItem {
+        let titleLabel = label(title, font: .systemFont(ofSize: 13, weight: .medium))
+        let percentLabel = label("\(percent)%", font: .monospacedDigitSystemFont(ofSize: 13, weight: .medium))
+        percentLabel.textColor = past ? .systemRed : .labelColor
+        let header = NSStackView(views: [titleLabel, NSView(), percentLabel])
         header.orientation = .horizontal
         header.distribution = .fill
-        title.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        percent.setContentHuggingPriority(.required, for: .horizontal)
+        titleLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        percentLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        let bar = BarView(fraction: Double(limit.percent) / 100, warning: past)
+        let bar = BarView(fraction: Double(percent) / 100, warning: past)
         bar.heightAnchor.constraint(equalToConstant: 6).isActive = true
 
-        let reset = label(ResetText.resets(at: limit.resetsAt, now: now), font: .systemFont(ofSize: 11))
-        reset.textColor = .secondaryLabelColor
-
-        return item(stack([header, bar, reset], spacing: 5))
+        var rows: [NSView] = [header, bar]
+        if let caption {
+            let captionLabel = label(caption, font: .systemFont(ofSize: 11))
+            captionLabel.textColor = .secondaryLabelColor
+            rows.append(captionLabel)
+        }
+        return item(stack(rows, spacing: 5))
     }
 
     /// Left label, right value, optional caption below.

@@ -34,9 +34,21 @@ public struct RateLimit: Equatable, Sendable, Codable {
     /// Row title as shown on the Usage page.
     public var title: String {
         switch kind {
-        case .session: return "Current session"
+        case .session: return Kind.session.title
         case .weeklyAll: return "This week"
         case .weeklyScoped: return scopeName.map { "\($0) this week" } ?? "Scoped this week"
+        case .other(let raw): return raw
+        }
+    }
+}
+
+extension RateLimit.Kind {
+    /// Title of the unscoped rows, usable without a limit value.
+    public var title: String {
+        switch self {
+        case .session: return "Current session"
+        case .weeklyAll: return "This week"
+        case .weeklyScoped: return "Scoped this week"
         case .other(let raw): return raw
         }
     }
