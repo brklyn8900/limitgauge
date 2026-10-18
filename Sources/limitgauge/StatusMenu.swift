@@ -9,10 +9,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let item: NSStatusItem
     private let menu = NSMenu()
     private let warningDot = WarningDotView()
+    private let openSettings: () -> Void
     private var isOpen = false
 
-    init(service: UsageService) {
+    init(service: UsageService, openSettings: @escaping () -> Void) {
         self.service = service
+        self.openSettings = openSettings
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
         menu.delegate = self
@@ -122,7 +124,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         })
 
         menu.addItem(.separator())
+        let settings = NSMenuItem(title: "Settings\u{2026}", action: #selector(showSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         menu.addItem(withTitle: "Quit limitgauge", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    }
+
+    @objc private func showSettings() {
+        openSettings()
     }
 
     // MARK: Icon
