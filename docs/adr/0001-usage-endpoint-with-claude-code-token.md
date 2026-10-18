@@ -1,12 +1,12 @@
 ---
 title: "ADR-0001: Read the account usage endpoint with Claude Code's Keychain token, read-only"
-status: Accepted
+status: Accepted; point 2 superseded by ADR-0004
 date: 2026-10-18
 ---
 
 # ADR-0001: Usage endpoint with Claude Code's token
 
-**Status:** Accepted
+**Status:** Accepted. Point 2 (the read mechanism) superseded by [ADR-0004](0004-read-credentials-through-security-cli.md).
 
 ## Context
 
