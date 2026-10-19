@@ -111,7 +111,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let thresholds = Settings.thresholds
 
         if let plan = service.plan {
-            items.append(MenuRows.keyValue("Plan", plan.displayName))
+            items.append(MenuRows.keyValue("Plan", plan.displayName, quiet: true))
             items.append(.separator())
         }
 

@@ -40,9 +40,10 @@ enum MenuRows {
         return item(stack(rows, spacing: 5))
     }
 
-    /// Left label, right value, optional caption below.
-    static func keyValue(_ key: String, _ value: String, detail: String? = nil) -> NSMenuItem {
+    /// Left label, right value, optional caption below. A quiet row greys the label too.
+    static func keyValue(_ key: String, _ value: String, detail: String? = nil, quiet: Bool = false) -> NSMenuItem {
         let k = label(key, font: .systemFont(ofSize: 13))
+        if quiet { k.textColor = .secondaryLabelColor }
         let v = label(value, font: .systemFont(ofSize: 13))
         v.textColor = .secondaryLabelColor
         v.alignment = .right
