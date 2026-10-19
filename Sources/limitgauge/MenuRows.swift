@@ -86,14 +86,12 @@ enum MenuRows {
         return item(stack([l], spacing: 0))
     }
 
-    /// A clickable row that runs `handler` and keeps the menu open. Standard menu items
-    /// always dismiss the menu when they fire; a custom view does not.
-    static func action(_ title: String, enabled: Bool, handler: @escaping () -> Void) -> NSMenuItem {
+    /// The view for a clickable row that runs `handler` and keeps the menu open. Standard
+    /// menu items always dismiss the menu when they fire; a custom view does not.
+    static func action(_ title: String, enabled: Bool, handler: @escaping () -> Void) -> NSView {
         let view = ActionRowView(title: title, enabled: enabled, handler: handler)
         view.frame = NSRect(x: 0, y: 0, width: width, height: 22)
-        let item = NSMenuItem()
-        item.view = view
-        return item
+        return view
     }
 
     // MARK: Building blocks

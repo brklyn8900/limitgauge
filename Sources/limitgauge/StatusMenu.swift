@@ -12,6 +12,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let openSettings: () -> Void
     private var isOpen = false
 
+    // The footer is built once and kept. Removing and re-adding standard items while the
+    // menu is open leaves AppKit's layout stale: a blank row under Quit, and Settings
+    // shifted out of the icon column.
+    private let footerSeparator = NSMenuItem.separator()
+    private let updatedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let refreshItem = NSMenuItem()
+
     init(service: UsageService, openSettings: @escaping () -> Void) {
         self.service = service
         self.openSettings = openSettings
@@ -30,6 +37,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 warningDot.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -3),
             ])
         }
+        addFooter()
         update()
     }
 
@@ -54,27 +62,70 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     // MARK: Rows
 
+    private func addFooter() {
+        updatedItem.isEnabled = false
+        let settings = NSMenuItem(title: "Settings\u{2026}", action: #selector(showSettings), keyEquivalent: ",")
+        settings.target = self
+        let quit = NSMenuItem(title: "Quit limitgauge", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        [footerSeparator, updatedItem, refreshItem, .separator(), settings, quit].forEach(menu.addItem)
+    }
+
     private func rebuild() {
-        menu.removeAllItems()
         let now = Date()
+        replaceContent(with: contentItems(now: now))
+
+        if service.isRefreshing {
+            updatedItem.title = "Updating\u{2026}"
+        } else if let snapshot = service.snapshot {
+            updatedItem.title = "Updated \(ResetText.ago(snapshot.fetchedAt, now: now))"
+        } else {
+            updatedItem.title = "No data yet"
+        }
+        refreshItem.view = MenuRows.action("Refresh", enabled: !service.isRefreshing) { [weak self] in
+            self?.service.refresh()
+        }
+    }
+
+    /// Swaps the rows above the footer. When the new rows have the same shape as the old,
+    /// each item stays in place and only its view changes, so an open menu keeps its items.
+    private func replaceContent(with items: [NSMenuItem]) {
+        let current = Array(menu.items.prefix { $0 !== footerSeparator })
+        let sameShape = current.count == items.count
+            && zip(current, items).allSatisfy { $0.isSeparatorItem == $1.isSeparatorItem }
+        if sameShape {
+            for (old, new) in zip(current, items) where !old.isSeparatorItem {
+                let view = new.view
+                new.view = nil
+                old.view = view
+            }
+            return
+        }
+        current.forEach(menu.removeItem)
+        for (index, item) in items.enumerated() {
+            menu.insertItem(item, at: index)
+        }
+    }
+
+    private func contentItems(now: Date) -> [NSMenuItem] {
+        var items: [NSMenuItem] = []
         let thresholds = Settings.thresholds
 
         if let plan = service.plan {
-            menu.addItem(MenuRows.keyValue("Plan", plan.displayName))
-            menu.addItem(.separator())
+            items.append(MenuRows.keyValue("Plan", plan.displayName))
+            items.append(.separator())
         }
 
         if let problem = service.problem, service.snapshot == nil {
-            menu.addItem(MenuRows.message(problem.message))
+            items.append(MenuRows.message(problem.message))
         }
 
         if let snapshot = service.snapshot {
             // The endpoint drops the session limit while no five-hour window is open.
             if snapshot.limit(.session) == nil {
-                menu.addItem(MenuRows.idleSession())
+                items.append(MenuRows.idleSession())
             }
             for limit in snapshot.limits {
-                menu.addItem(MenuRows.limit(limit, now: now, past: thresholds.isPast(limit)))
+                items.append(MenuRows.limit(limit, now: now, past: thresholds.isPast(limit)))
             }
 
             var extras: [NSMenuItem] = []
@@ -95,43 +146,21 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 extras.append(MenuRows.keyValue("Limit resets", value))
             }
             if !extras.isEmpty {
-                menu.addItem(.separator())
-                extras.forEach(menu.addItem)
+                items.append(.separator())
+                items.append(contentsOf: extras)
             }
 
             if let breakdown = snapshot.weeklyBreakdown, !breakdown.isEmpty {
-                menu.addItem(.separator())
-                menu.addItem(MenuRows.breakdown(breakdown))
+                items.append(.separator())
+                items.append(MenuRows.breakdown(breakdown))
             }
 
             if let problem = service.problem {
-                menu.addItem(.separator())
-                menu.addItem(MenuRows.message(problem.message))
+                items.append(.separator())
+                items.append(MenuRows.message(problem.message))
             }
         }
-
-        menu.addItem(.separator())
-        let status: String
-        if service.isRefreshing {
-            status = "Updating\u{2026}"
-        } else if let snapshot = service.snapshot {
-            status = "Updated \(ResetText.ago(snapshot.fetchedAt, now: now))"
-        } else {
-            status = "No data yet"
-        }
-        let updated = NSMenuItem(title: status, action: nil, keyEquivalent: "")
-        updated.isEnabled = false
-        menu.addItem(updated)
-
-        menu.addItem(MenuRows.action("Refresh", enabled: !service.isRefreshing) { [weak self] in
-            self?.service.refresh()
-        })
-
-        menu.addItem(.separator())
-        let settings = NSMenuItem(title: "Settings\u{2026}", action: #selector(showSettings), keyEquivalent: ",")
-        settings.target = self
-        menu.addItem(settings)
-        menu.addItem(withTitle: "Quit limitgauge", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        return items
     }
 
     @objc private func showSettings() {
