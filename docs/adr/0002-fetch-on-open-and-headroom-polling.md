@@ -18,25 +18,40 @@ idle and too seldom when a five-hour window is being spent quickly.
 
 ## Decision
 
-1. **Menu open shows the cached snapshot at once.** If it is older than two minutes, a fetch
-   runs in the background and the rows update in place. A Refresh item forces a fetch.
-2. **Background polls exist only for warnings.** After every fetch, compute each limit's
-   headroom: warning threshold minus current percent, in percentage points. The least
-   headroom among limits that have not yet fired picks the next poll: over 40 points, 60 min;
-   15 to 40, 30 min; under 15, 10 min.
-3. Any fetch restarts the clock, so a user who opens the menu often pays for no extra polls.
-4. No timer fires while the Mac sleeps. On wake, poll if the next poll is overdue.
-5. The snapshot and its timestamp persist in `UserDefaults`, so the menu is populated at
+1. **Menu open shows the cached snapshot at once.** If the last fetch attempt, successful or
+   not, is older than two minutes, a fetch runs in the background and the rows update in
+   place. A Refresh item forces a fetch.
+2. **Background polls exist only for warnings.** After every successful fetch, compute each
+   limit's headroom: warning threshold minus current percent, in percentage points. The least
+   headroom among limits still below their threshold picks the next poll: over 40 points,
+   60 min; 15 to 40, 30 min; under 15, 10 min. A limit at or past its threshold has nothing
+   left to warn about until its window resets, so it leaves the pacing; the next poll comes
+   one minute after that reset if that is sooner.
+3. **After a failed fetch, polls back off**, never sooner than the last snapshot's own pace.
+   No network, a 5xx, an unreadable response or a locked Keychain: 10 minutes after the first
+   failure, doubling up to 60. A 429: 30 minutes, then 60. Failures only the user can fix (no
+   credentials, a rejected token, an unreadable Keychain item, a failing `security` tool): 60
+   minutes. A poll does not resend a token the endpoint has rejected; opening the menu or
+   Refresh does. The first success returns to headroom pacing.
+4. Any fetch attempt restarts the clock, so a user who opens the menu often pays for no extra
+   polls.
+5. No timer fires while the Mac sleeps. On wake the timer is re-armed for the same time, so
+   an overdue poll runs at once.
+6. The snapshot and its timestamp persist in `UserDefaults`, so the menu is populated at
    launch.
 
 ## Consequences
 
 - The numbers are current when viewed, by construction. There is no staleness to explain.
-- Request volume is a handful per hour at most, and lowest when it matters least.
+- Request volume is a handful per hour at most, and lowest when it matters least. A failure
+  never polls faster than success would. An expired token while Claude Code is idle costs
+  one rejected request, then a Keychain read an hour and no requests.
 - A warning can arrive up to one poll interval after the threshold was actually crossed. With
   the 10-minute step near the threshold this is accepted.
-- The scheduler is a pure function of the snapshot and the clock, which keeps it testable
-  without timers.
+- The scheduler is a pure function of the snapshot, the run of consecutive failures and the
+  thresholds. It does not read the clock, and every due time it returns is at least a minute
+  after the last attempt, so no state can make it poll in a loop. It lives in the core
+  library and is tested without timers.
 
 ## Alternatives considered
 
@@ -47,6 +62,8 @@ idle and too seldom when a five-hour window is being spent quickly.
   rate: the five-hour session limit can move 40 points in half an hour, while a weekly limit at
   51 percent cannot move meaningfully in that time, and the rule said nothing about the weekly
   limits. Replaced by headroom, which is the quantity a warning depends on.
+- **Retry a failed fetch on the headroom schedule.** A failure leaves no fresh snapshot to
+  pace from, and a 429 or a dead token would be retried as often as a healthy fetch.
 - **Status line triggered polls.** Poll when Claude Code's status line script reports a turn
   and the last poll is older than a few minutes. Ties the schedule to Claude Code only and
   brings back the status line feed and its stale-write race. Dropped with the feed.
