@@ -40,34 +40,70 @@ extension Date {
     }
 }
 
-/// Background poll pacing from ADR-0002: the limit with the least headroom to its warning
-/// threshold picks the interval. Limits that already fired are excluded.
-public enum PollScheduler {
-    public static let farInterval: TimeInterval = 60 * 60
-    public static let nearInterval: TimeInterval = 30 * 60
-    public static let closeInterval: TimeInterval = 10 * 60
+/// Consecutive failed attempts since the last success. Nil on the service while the last
+/// attempt succeeded, so "is there a problem" and "are we backing off" cannot disagree.
+struct FailureStreak: Equatable, Sendable {
+    var problem: UsageProblem
+    /// At least 1.
+    var count: Int
+    var lastAttempt: Date
+}
 
-    /// Threshold minus percent, in points; negative once past.
-    public static func headroom(_ limit: RateLimit, thresholds: WarningThresholds) -> Int {
-        thresholds.threshold(for: limit.kind) - limit.percent
-    }
+/// Background poll pacing (ADR-0002). A pure function of the snapshot, the failure streak and
+/// the thresholds. It never reads the clock, and every due time it returns is at least a
+/// minute after the last attempt, so no state can make it poll in a loop. Internal: the app
+/// reads `UsageService.nextPoll` and cannot compute a due time of its own.
+enum PollScheduler {
+    static let farInterval: TimeInterval = 60 * 60
+    static let nearInterval: TimeInterval = 30 * 60
+    static let closeInterval: TimeInterval = 10 * 60
+    /// How long after a past-threshold limit's reset to look again, so the new window's
+    /// numbers are in.
+    static let afterReset: TimeInterval = 60
 
-    public static func interval(for headroom: Int) -> TimeInterval {
+    static func interval(for headroom: Int) -> TimeInterval {
         if headroom > 40 { return farInterval }
         if headroom >= 15 { return nearInterval }
         return closeInterval
     }
 
-    /// Interval until the next background poll, measured from the snapshot's fetch time.
-    public static func nextInterval(
-        snapshot: UsageSnapshot?,
-        thresholds: WarningThresholds,
-        fired: Set<WarningKey>
-    ) -> TimeInterval {
-        guard let snapshot else { return farInterval }
-        let pending = snapshot.limits.filter { !fired.contains(WarningKey($0)) }
-        guard let least = pending.map({ headroom($0, thresholds: thresholds) }).min() else { return farInterval }
-        return interval(for: least)
+    /// The wait after the `count`th consecutive failure (ADR-0002 point 3).
+    static func backoff(_ retry: RetryClass, afterFailures count: Int) -> TimeInterval {
+        let n = max(count, 1)
+        switch retry {
+        case .transient: return min(farInterval, closeInterval * Double(1 << min(n - 1, 3)))
+        case .rateLimited: return n == 1 ? nearInterval : farInterval
+        case .needsUser: return farInterval
+        }
+    }
+
+    /// The headroom pace of a snapshot, measured from its fetch: the least headroom among
+    /// limits still below their threshold (60 min if none), or one minute after the earliest
+    /// reset of a limit past its threshold, whichever is sooner. Limit states are taken at
+    /// `fetchedAt`, so a past limit's reset is always after the fetch.
+    static func paced(_ snapshot: UsageSnapshot, thresholds: WarningThresholds) -> Date {
+        let at = snapshot.fetchedAt
+        let states = snapshot.limits.map { ($0, thresholds.state(of: $0, at: at)) }
+        let least = states.compactMap { state -> Int? in
+            if case .below(let headroom) = state.1 { return headroom }
+            return nil
+        }.min()
+        let pace = at.addingTimeInterval(least.map(interval(for:)) ?? farInterval)
+        let rearm = states.filter { $0.1 == .past }.map { $0.0.resetsAt.addingTimeInterval(afterReset) }.min()
+        return min(pace, rearm ?? pace)
+    }
+
+    /// When the next background poll is due, or nil before the first attempt on a fresh
+    /// install (launch makes one at once).
+    ///
+    /// After a failure: the backoff from the attempt, but never before the snapshot's own pace,
+    /// so a failure cannot poll faster than success would. With no snapshot there is no pace,
+    /// and the backoff alone decides. Otherwise: the snapshot's pace.
+    static func nextPoll(snapshot: UsageSnapshot?, failures: FailureStreak?, thresholds: WarningThresholds) -> Date? {
+        let pace = snapshot.map { paced($0, thresholds: thresholds) }
+        guard let failures else { return pace }
+        let retry = failures.lastAttempt.addingTimeInterval(backoff(failures.problem.retry, afterFailures: failures.count))
+        return max(retry, pace ?? retry)
     }
 }
 

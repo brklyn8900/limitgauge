@@ -2,8 +2,8 @@ import AppKit
 import LimitGaugeCore
 
 /// Holds the one-shot timer for the next background poll (ADR-0002). It computes nothing:
-/// the due time comes from `UsageService.nextPoll`. No timer fires during sleep; on wake the
-/// poller polls if the due time has passed.
+/// the due time comes from `UsageService.nextPoll`, which is always at least a minute after
+/// the last attempt, so a due time in the past fires once and moves on.
 @MainActor
 final class Poller {
     private let poll: @MainActor () -> Void
@@ -16,7 +16,10 @@ final class Poller {
         observer = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.didWake() }
+            // A timer's clock pauses during sleep, so its fire date slips by the sleep's length.
+            // Re-arming at the same date fixes that, and a date that passed during sleep fires
+            // at once (ADR-0002 point 5).
+            MainActor.assumeIsolated { self?.rearm() }
         }
     }
 
@@ -27,14 +30,13 @@ final class Poller {
         timer = nil
         self.due = due
         guard let due else { return }
-        let fire = max(due, Date().addingTimeInterval(5))
-        let t = Timer(fire: fire, interval: 0, repeats: false) { [weak self] _ in
+        let t = Timer(fire: due, interval: 0, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.fire() }
         }
-        t.tolerance = min(60, max(0, fire.timeIntervalSinceNow) / 10)
+        t.tolerance = min(60, max(0, due.timeIntervalSinceNow) / 10)
         RunLoop.main.add(t, forMode: .common)
         timer = t
-        Log.poll.debug("next poll in \(Int(fire.timeIntervalSinceNow)) s")
+        Log.poll.debug("next poll in \(Int(due.timeIntervalSinceNow)) s")
     }
 
     private func fire() {
@@ -45,9 +47,9 @@ final class Poller {
         poll()
     }
 
-    private func didWake() {
-        guard let due, due <= Date() else { return }
-        Log.poll.info("poll overdue after wake")
-        fire()
+    private func rearm() {
+        let due = self.due
+        self.due = nil
+        schedule(at: due)
     }
 }

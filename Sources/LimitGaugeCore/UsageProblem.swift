@@ -29,6 +29,24 @@ public enum UsageProblem: Equatable, Sendable {
         case .decoding: return "Usage response could not be read."
         }
     }
+
+    /// How a failure backs off (ADR-0002 point 3). Exhaustive with no default, so a new
+    /// problem does not build until it has a retry policy.
+    var retry: RetryClass {
+        switch self {
+        case .offline, .decoding, .keychainDenied: return .transient
+        case .server(429): return .rateLimited
+        case .server: return .transient
+        case .noCredentials, .tokenRejected, .credentialsUnreadable, .keychainToolFailed: return .needsUser
+        }
+    }
+}
+
+/// Transient: offline, 5xx, an unreadable response, a locked keychain or a read that timed
+/// out. Rate limited: 429. Needs user: nothing changes until the user acts (signs in, runs
+/// Claude Code, updates limitgauge).
+enum RetryClass: Sendable {
+    case transient, rateLimited, needsUser
 }
 
 /// A failed refresh: the problem the menu shows, and the one line the log gets.
@@ -82,4 +100,8 @@ struct RefreshFailure: Error, Equatable {
     /// 401, and the re-read returned the same token: ADR-0001's one retry is spent.
     static let tokenUnchanged = RefreshFailure(
         problem: .tokenRejected, logDescription: "usage: 401; the Keychain still holds the same token")
+
+    /// A poll read the token the endpoint already rejected and sent nothing (ADR-0002 point 3).
+    static let tokenStillRejected = RefreshFailure(
+        problem: .tokenRejected, logDescription: "usage: token already rejected; poll sent no request")
 }

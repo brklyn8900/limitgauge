@@ -44,16 +44,19 @@ public final class UsageService {
 
     /// The last good snapshot. Survives failures and relaunches.
     public private(set) var snapshot: UsageSnapshot?
-    /// Set while the last refresh failed; cleared by a success.
-    public private(set) var problem: UsageProblem?
+    /// Nil while the last attempt succeeded.
+    private(set) var failures: FailureStreak?
 
     public var plan: Plan? { fetchedPlan?.plan }
+    /// There is a problem exactly when the last attempt failed.
+    public var problem: UsageProblem? { failures?.problem }
     public var isRefreshing: Bool { inFlight != nil }
 
-    /// When the next background poll is due: the snapshot's fetch time plus the headroom
-    /// interval (ADR-0002). Nil without a snapshot.
+    /// When the next background poll is due, from the pure scheduler (ADR-0002). Derived on
+    /// every read, so a refresh or a threshold change shows without anyone recomputing it.
+    /// Nil only before the first attempt on a fresh install.
     public var nextPoll: Date? {
-        snapshot.map { $0.fetchedAt.addingTimeInterval(PollScheduler.nextInterval(snapshot: $0, thresholds: thresholds(), fired: fired)) }
+        PollScheduler.nextPoll(snapshot: snapshot, failures: failures, thresholds: thresholds())
     }
 
     /// Called on the main actor when a refresh starts, when it ends or is skipped, and after a
@@ -64,6 +67,9 @@ public final class UsageService {
     /// Warnings already posted, per window (mirrors the store).
     private var fired: Set<WarningKey>
     private var inFlight: Task<RefreshOutcome, Never>?
+    /// The token the endpoint last rejected, in memory only. A poll that reads it again sends
+    /// nothing; launch, menu open and Refresh still send it. Cleared by any success.
+    private var rejectedToken: AccessToken?
 
     private let readToken: TokenReader
     private let fetcher: any UsageFetching
@@ -102,7 +108,7 @@ public final class UsageService {
             onChange?()
             return Task { .skipped }
         }
-        let task = Task { await self.perform() }
+        let task = Task { await self.perform(reason) }
         inFlight = task
         onChange?()
         return task
@@ -125,23 +131,31 @@ public final class UsageService {
 
     // MARK: Private
 
+    /// The last attempt, successful or not. The cache and the scheduler both measure from it,
+    /// so a failure moves the clock.
+    private var lastAttempt: Date? {
+        failures?.lastAttempt ?? snapshot?.fetchedAt
+    }
+
     private func shouldFetch(for reason: RefreshReason) -> Bool {
         switch reason {
         case .refreshRow, .poll:
             return true
         case .launch, .menuOpen:
-            guard let snapshot else { return true }
-            return now().timeIntervalSince(snapshot.fetchedAt) >= Self.staleAfter
+            guard let lastAttempt else { return true }
+            return now().timeIntervalSince(lastAttempt) >= Self.staleAfter
         }
     }
 
     /// The whole refresh. Applies every effect once, before the task completes, so a caller
     /// that awaits the outcome sees a finished state.
-    private func perform() async -> RefreshOutcome {
+    private func perform(_ reason: RefreshReason) async -> RefreshOutcome {
+        let started = now()
         let outcome: RefreshOutcome
         do {
-            let working = try await fetchUsage()
-            problem = nil
+            let working = try await fetchUsage(reason)
+            failures = nil
+            rejectedToken = nil
             if let snapshot { store.save(snapshot: snapshot) }
             if let plan = await planIfStale(token: working) {
                 fetchedPlan = plan
@@ -149,8 +163,9 @@ public final class UsageService {
             }
             outcome = .fetched
         } catch {
-            problem = error.problem
-            Log.fetch.error("usage fetch failed: \(error.logDescription, privacy: .public)")
+            let count = (failures?.count ?? 0) + 1
+            failures = FailureStreak(problem: error.problem, count: count, lastAttempt: started)
+            Log.fetch.error("usage fetch failed (\(count) in a row): \(error.logDescription, privacy: .public)")
             outcome = .failed(error.problem)
         }
         await deliverDueWarnings()
@@ -162,13 +177,15 @@ public final class UsageService {
     /// ADR-0001: read the token; on 401 re-read once and retry once if it changed. Stores the
     /// snapshot and returns the token that succeeded, so the plan never goes out with a
     /// rejected one.
-    private func fetchUsage() async throws(RefreshFailure) -> AccessToken {
+    private func fetchUsage(_ reason: RefreshReason) async throws(RefreshFailure) -> AccessToken {
         let token: AccessToken
         do {
             token = try await readToken()
         } catch {
             throw RefreshFailure(error)
         }
+        // A poll exists only for warnings, and a rejected token cannot produce any.
+        if reason == .poll, token == rejectedToken { throw .tokenStillRejected }
         do {
             snapshot = try await fetcher.fetchUsage(token: token)
             return token
@@ -180,10 +197,16 @@ public final class UsageService {
             } catch {
                 throw RefreshFailure(error)
             }
-            guard fresh != token else { throw .tokenUnchanged }
+            guard fresh != token else {
+                rejectedToken = token
+                throw .tokenUnchanged
+            }
             do {
                 snapshot = try await fetcher.fetchUsage(token: fresh)
                 return fresh
+            } catch .unauthorized {
+                rejectedToken = fresh
+                throw RefreshFailure(.unauthorized)
             } catch {
                 throw RefreshFailure(error)
             }

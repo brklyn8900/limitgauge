@@ -30,4 +30,21 @@ public struct WarningThresholds: Equatable, Sendable, Codable {
     public func anyPast(in snapshot: UsageSnapshot) -> Bool {
         snapshot.limits.contains(where: isPast)
     }
+
+    /// Where a limit stands against its threshold at `now`.
+    public func state(of limit: RateLimit, at now: Date) -> LimitState {
+        if limit.resetsAt <= now { return .reset }
+        let headroom = threshold(for: limit.kind) - limit.percent
+        return headroom > 0 ? .below(headroom: headroom) : .past
+    }
+}
+
+/// Where a limit stands, at a given moment, against its threshold.
+public enum LimitState: Equatable, Sendable {
+    /// Below its threshold by this many points (more than zero).
+    case below(headroom: Int)
+    /// At or past its threshold, in a window that has not reset.
+    case past
+    /// Its window has reset since the snapshot was fetched: the value is unknown until a fetch.
+    case reset
 }

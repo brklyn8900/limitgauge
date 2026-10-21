@@ -6,12 +6,16 @@ private let now = Date(timeIntervalSince1970: 1_800_000_000)
 private let sessionReset = now.addingTimeInterval(3600)
 private let weekReset = now.addingTimeInterval(36 * 3600)
 
-private func snap(session: Int, week: Int, fable: Int) -> UsageSnapshot {
+private func snap(session: Int, week: Int, fable: Int, fetchedAt: Date = now) -> UsageSnapshot {
     UsageSnapshot(limits: [
         RateLimit(kind: .session, percent: session, resetsAt: sessionReset),
         RateLimit(kind: .weeklyAll, percent: week, resetsAt: weekReset),
         RateLimit(kind: .weeklyScoped, percent: fable, resetsAt: weekReset, scopeName: "Fable"),
-    ], fetchedAt: now)
+    ], fetchedAt: fetchedAt)
+}
+
+private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offline) -> FailureStreak {
+    FailureStreak(problem: problem, count: count, lastAttempt: date)
 }
 
 @Suite struct PollSchedulerTests {
@@ -22,27 +26,81 @@ private func snap(session: Int, week: Int, fable: Int) -> UsageSnapshot {
         #expect(PollScheduler.interval(for: 40) == 30 * 60)
         #expect(PollScheduler.interval(for: 15) == 30 * 60)
         #expect(PollScheduler.interval(for: 14) == 10 * 60)
-        #expect(PollScheduler.interval(for: -5) == 10 * 60)
+        #expect(PollScheduler.interval(for: 1) == 10 * 60)
     }
 
-    @Test func leastHeadroomWins() {
+    @Test func leastHeadroomAmongLimitsBelowThreshold() {
         // Headrooms 50, 15, 40: the week picks 30 min.
-        #expect(PollScheduler.nextInterval(snapshot: snap(session: 30, week: 70, fable: 40), thresholds: t, fired: []) == 30 * 60)
-        // All far.
-        #expect(PollScheduler.nextInterval(snapshot: snap(session: 10, week: 20, fable: 10), thresholds: t, fired: []) == 60 * 60)
-        // Session close.
-        #expect(PollScheduler.nextInterval(snapshot: snap(session: 70, week: 20, fable: 10), thresholds: t, fired: []) == 10 * 60)
+        #expect(PollScheduler.nextPoll(snapshot: snap(session: 30, week: 70, fable: 40), failures: nil, thresholds: t) == now + 30 * 60)
+        #expect(PollScheduler.nextPoll(snapshot: snap(session: 10, week: 20, fable: 10), failures: nil, thresholds: t) == now + 60 * 60)
+        #expect(PollScheduler.nextPoll(snapshot: snap(session: 70, week: 20, fable: 10), failures: nil, thresholds: t) == now + 10 * 60)
     }
 
-    @Test func firedLimitsAreExcluded() {
-        let s = snap(session: 90, week: 20, fable: 10)
-        #expect(PollScheduler.nextInterval(snapshot: s, thresholds: t, fired: []) == 10 * 60)
-        let fired: Set<WarningKey> = [WarningKey(s.limits[0])]
-        #expect(PollScheduler.nextInterval(snapshot: s, thresholds: t, fired: fired) == 60 * 60)
+    /// Replaces firedLimitsAreExcluded: the pace ignores past limits, warned or not, so an
+    /// undelivered warning cannot hold polling at ten minutes.
+    @Test func pastLimitLeavesThePace() {
+        let s = UsageSnapshot(limits: [
+            RateLimit(kind: .session, percent: 90, resetsAt: now + 5 * 3600),
+            RateLimit(kind: .weeklyAll, percent: 20, resetsAt: weekReset),
+        ], fetchedAt: now)
+        #expect(PollScheduler.nextPoll(snapshot: s, failures: nil, thresholds: t) == now + 60 * 60)
     }
 
-    @Test func noSnapshotIsHourly() {
-        #expect(PollScheduler.nextInterval(snapshot: nil, thresholds: t, fired: []) == 60 * 60)
+    /// One look a minute after a past limit's window resets, if that is sooner than the pace.
+    @Test func pastLimitsResetPullsThePollIn() {
+        let s = UsageSnapshot(limits: [RateLimit(kind: .session, percent: 90, resetsAt: now + 20 * 60)], fetchedAt: now)
+        #expect(PollScheduler.nextPoll(snapshot: s, failures: nil, thresholds: t) == now + 21 * 60)
+    }
+
+    @Test func nothingBeforeTheFirstAttempt() {
+        #expect(PollScheduler.nextPoll(snapshot: nil, failures: nil, thresholds: t) == nil)
+    }
+
+    @Test func failureWithoutSnapshotBacksOff() {
+        #expect(PollScheduler.nextPoll(snapshot: nil, failures: streak(1, at: now), thresholds: t) == now + 10 * 60)
+    }
+
+    /// A stale snapshot's pace is in the past; the backoff from the attempt decides.
+    @Test func failureWithStaleSnapshotBacksOffFromTheAttempt() {
+        let old = snap(session: 70, week: 20, fable: 10, fetchedAt: now - 3 * 3600)
+        #expect(PollScheduler.nextPoll(snapshot: old, failures: streak(1, at: now), thresholds: t) == now + 10 * 60)
+    }
+
+    /// Far from every threshold, a fresh snapshot's hourly pace wins over the 10-minute retry.
+    @Test func failureNeverPollsFasterThanSuccess() {
+        let fresh = snap(session: 10, week: 20, fable: 10)
+        #expect(PollScheduler.nextPoll(snapshot: fresh, failures: streak(1, at: now + 60), thresholds: t) == now + 60 * 60)
+    }
+
+    @Test func backoffByClass() {
+        #expect((1...6).map { PollScheduler.backoff(.transient, afterFailures: $0) / 60 } == [10, 20, 40, 60, 60, 60])
+        #expect((1...3).map { PollScheduler.backoff(.rateLimited, afterFailures: $0) / 60 } == [30, 60, 60])
+        #expect((1...3).map { PollScheduler.backoff(.needsUser, afterFailures: $0) / 60 } == [60, 60, 60])
+    }
+
+    @Test func problemsMapToRetryClasses() {
+        #expect(UsageProblem.server(429).retry == .rateLimited)
+        #expect(UsageProblem.server(503).retry == .transient)
+        #expect(UsageProblem.offline.retry == .transient)
+        #expect(UsageProblem.keychainDenied.retry == .transient)
+        #expect(UsageProblem.tokenRejected.retry == .needsUser)
+        #expect(UsageProblem.noCredentials.retry == .needsUser)
+    }
+
+    /// The loop guard as a property: no input yields a due time within a minute of the last
+    /// attempt.
+    @Test func neverWithinAMinuteOfTheLastAttempt() {
+        let problems: [UsageProblem] = [.offline, .server(429), .server(503), .tokenRejected, .keychainDenied]
+        for session in stride(from: 0, through: 100, by: 5) {
+            for reset in [-3600.0, -1, 0, 1, 59, 61, 600, 18000] {
+                let s = UsageSnapshot(limits: [RateLimit(kind: .session, percent: session, resetsAt: now + reset)], fetchedAt: now)
+                let streaks = [nil] + problems.flatMap { p in [streak(1, at: now, p), streak(9, at: now, p)] }
+                for failures in streaks {
+                    let due = PollScheduler.nextPoll(snapshot: s, failures: failures, thresholds: t)
+                    #expect(due.map { $0.timeIntervalSince(now) >= 60 } == true)
+                }
+            }
+        }
     }
 }
 
