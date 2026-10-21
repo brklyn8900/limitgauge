@@ -18,23 +18,35 @@ import Testing
         #expect(ResetText.resets(at: now.addingTimeInterval(10), now: now) == "Resets now")
     }
 
+    // 2026-10-18 10:00 UTC, a Sunday.
+    let sunday = Date(timeIntervalSince1970: 1_792_317_600)
+
+    /// A Gregorian calendar carrying the locale and time zone the text is formatted in.
+    func pinned(_ zone: String) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "en_US")
+        calendar.timeZone = TimeZone(identifier: zone)!
+        return calendar
+    }
+
     @Test func sameDayOmitsWeekday() {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        let now = cal.date(from: DateComponents(year: 2026, month: 10, day: 18, hour: 10))!
-        let later = now.addingTimeInterval(2 * 3600)
-        let text = ResetText.resets(at: later, now: now, calendar: cal)
-        #expect(text.hasPrefix("Resets in 2h ("))
-        #expect(!text.contains("Sun"))
+        #expect(ResetText.resets(at: sunday + 2 * 3600, now: sunday, calendar: pinned("UTC")) == "Resets in 2h (12:00\u{202F}PM)")
     }
 
     @Test func otherDayIncludesWeekday() {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        let now = cal.date(from: DateComponents(year: 2026, month: 10, day: 18, hour: 10))!
-        let text = ResetText.clock(now.addingTimeInterval(36 * 3600), now: now, calendar: cal)
-        #expect(text.count > 5)
-        #expect(text.first?.isLetter == true)
+        #expect(ResetText.resets(at: sunday + 36 * 3600, now: sunday, calendar: pinned("UTC")) == "Resets in 1d 12h (Mon 10:00\u{202F}PM)")
+    }
+
+    /// 22:00 UTC on Monday is 01:00 on Tuesday in Jerusalem (UTC+3 until 2026-10-25).
+    @Test func timeZoneMovesTheClockAndTheDay() {
+        #expect(ResetText.resets(at: sunday + 36 * 3600, now: sunday, calendar: pinned("Asia/Jerusalem")) == "Resets in 1d 12h (Tue 1:00\u{202F}AM)")
+    }
+
+    @Test func expiry() {
+        // 2026-11-05 07:59 UTC.
+        let date = Date(timeIntervalSince1970: 1_793_865_540)
+        #expect(ResetText.expires(at: date, calendar: pinned("UTC")) == "Expires Nov 5 at 7:59\u{202F}AM")
+        #expect(ResetText.expires(at: date, calendar: pinned("Asia/Jerusalem")) == "Expires Nov 5 at 9:59\u{202F}AM")
     }
 
     @Test func ago() {

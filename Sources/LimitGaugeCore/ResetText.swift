@@ -1,6 +1,7 @@
 import Foundation
 
-/// Text for reset and expiry times, in the user's time zone.
+/// Text for reset and expiry times. Every function formats in its calendar's locale and time
+/// zone; the default calendar carries the user's.
 public enum ResetText {
     /// "Resets in 2h 14m (7:00 PM)" under a day, "Resets in 2d 5h (Sun 7:00 PM)" beyond,
     /// "Resets now" once passed.
@@ -10,9 +11,9 @@ public enum ResetText {
         return "Resets in \(duration(remaining)) (\(clock(reset, now: now, calendar: calendar)))"
     }
 
-    /// "Expires Nov 5, 2:59 AM".
+    /// "Expires Nov 5 at 2:59 AM".
     public static func expires(at date: Date, calendar: Calendar = .current) -> String {
-        "Expires \(date.formatted(.dateTime.month(.abbreviated).day().hour().minute()))"
+        "Expires \(date.formatted(style(calendar).month(.abbreviated).day().hour().minute()))"
     }
 
     /// "12 s ago", "3 min ago", "2 h ago".
@@ -35,8 +36,13 @@ public enum ResetText {
 
     /// Clock time, with the weekday when the reset is not today.
     static func clock(_ date: Date, now: Date, calendar: Calendar) -> String {
-        let time = date.formatted(.dateTime.hour().minute())
+        let time = date.formatted(style(calendar).hour().minute())
         if calendar.isDate(date, inSameDayAs: now) { return time }
-        return "\(date.formatted(.dateTime.weekday(.abbreviated))) \(time)"
+        return "\(date.formatted(style(calendar).weekday(.abbreviated))) \(time)"
+    }
+
+    /// `.dateTime` reads the process's locale and time zone; this one reads the calendar's.
+    private static func style(_ calendar: Calendar) -> Date.FormatStyle {
+        Date.FormatStyle(locale: calendar.locale ?? .current, calendar: calendar, timeZone: calendar.timeZone)
     }
 }
