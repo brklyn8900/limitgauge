@@ -15,17 +15,17 @@ final class ScriptedFetcher: UsageFetching, @unchecked Sendable {
         planResults = plan
     }
 
-    func fetchUsage(token: String) async throws(UsageAPI.Error) -> UsageSnapshot {
+    func fetchUsage(token: AccessToken) async throws(UsageAPI.Error) -> UsageSnapshot {
         let result: Result<UsageSnapshot, UsageAPI.Error> = lock.withLock {
-            usageTokens.append(token)
+            usageTokens.append(token.value)
             return usageResults.isEmpty ? .failure(.httpStatus(599)) : usageResults.removeFirst()
         }
         return try result.get()
     }
 
-    func fetchPlan(token: String) async throws(UsageAPI.Error) -> Plan {
+    func fetchPlan(token: AccessToken) async throws(UsageAPI.Error) -> Plan {
         let result: Result<Plan, UsageAPI.Error> = lock.withLock {
-            planTokens.append(token)
+            planTokens.append(token.value)
             return planResults.isEmpty ? .failure(.httpStatus(599)) : planResults.removeFirst()
         }
         return try result.get()
@@ -37,8 +37,8 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
                   fetchedAt: date)
 }
 
-private func token(_ s: String) -> ClaudeCodeCredentials.Token {
-    ClaudeCodeCredentials.Token(accessToken: s, expiresAt: nil)
+private func token(_ s: String) -> AccessToken {
+    AccessToken(s)
 }
 
 @MainActor
@@ -171,7 +171,7 @@ private final class Tokens: @unchecked Sendable {
     private var values: [String]
     private let lock = NSLock()
     init(_ values: [String]) { self.values = values }
-    func next() -> ClaudeCodeCredentials.Token {
+    func next() -> AccessToken {
         lock.lock(); defer { lock.unlock() }
         let v = values.count > 1 ? values.removeFirst() : values[0]
         return token(v)

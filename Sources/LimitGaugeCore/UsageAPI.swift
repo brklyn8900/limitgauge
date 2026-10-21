@@ -36,7 +36,7 @@ public struct UsageAPI: Sendable {
         return URLSession(configuration: configuration)
     }
 
-    public func fetchUsage(token: String) async throws(Error) -> UsageSnapshot {
+    public func fetchUsage(token: AccessToken) async throws(Error) -> UsageSnapshot {
         let data = try await get(Self.usageURL, token: token)
         do {
             return try UsageDecoding.snapshot(from: data)
@@ -47,7 +47,7 @@ public struct UsageAPI: Sendable {
         }
     }
 
-    public func fetchPlan(token: String) async throws(Error) -> Plan {
+    public func fetchPlan(token: AccessToken) async throws(Error) -> Plan {
         let data = try await get(Self.profileURL, token: token)
         do {
             return try UsageDecoding.plan(from: data)
@@ -58,17 +58,17 @@ public struct UsageAPI: Sendable {
         }
     }
 
-    public static func request(_ url: URL, token: String) -> URLRequest {
+    public static func request(_ url: URL, token: AccessToken) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(token.value)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 15
         return request
     }
 
-    private func get(_ url: URL, token: String) async throws(Error) -> Data {
+    private func get(_ url: URL, token: AccessToken) async throws(Error) -> Data {
         let data: Data
         let response: URLResponse
         do {

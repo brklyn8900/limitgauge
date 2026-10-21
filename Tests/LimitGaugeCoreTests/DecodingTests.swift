@@ -178,9 +178,19 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
                            "scopes": ["user:inference"], "subscriptionType": "max"}}
         """.utf8)
         let token = try ClaudeCodeCredentials.parse(data)
-        #expect(token.accessToken == "sk-ant-oat01-test")
+        #expect(token.value == "sk-ant-oat01-test")
         #expect(token.expiresAt == Date(timeIntervalSince1970: 4102444800.241))
         #expect(token.isExpired == false)
+    }
+
+    /// No textual form of the token may carry the secret, so no log line or crash dump can.
+    @Test func tokenNeverPrints() throws {
+        let token = try ClaudeCodeCredentials.parse(Data(#"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-secret"}}"#.utf8))
+        var dumped = ""
+        dump(token, to: &dumped)
+        for text in ["\(token)", String(reflecting: token), dumped] {
+            #expect(!text.contains("secret"))
+        }
     }
 
     @Test func securityExitCodesMapToErrors() {

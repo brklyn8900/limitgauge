@@ -25,8 +25,8 @@ public enum UsageProblem: Equatable, Sendable {
 }
 
 public protocol UsageFetching: Sendable {
-    func fetchUsage(token: String) async throws(UsageAPI.Error) -> UsageSnapshot
-    func fetchPlan(token: String) async throws(UsageAPI.Error) -> Plan
+    func fetchUsage(token: AccessToken) async throws(UsageAPI.Error) -> UsageSnapshot
+    func fetchPlan(token: AccessToken) async throws(UsageAPI.Error) -> Plan
 }
 
 extension UsageAPI: UsageFetching {}
@@ -48,13 +48,13 @@ public final class UsageService {
     public var onChange: (() -> Void)?
 
     private let fetcher: any UsageFetching
-    private let tokenSource: @Sendable () throws -> ClaudeCodeCredentials.Token
+    private let tokenSource: @Sendable () throws -> AccessToken
     private let now: @Sendable () -> Date
     private var inFlight: Task<Void, Never>?
 
     public init(
         fetcher: any UsageFetching,
-        tokenSource: @escaping @Sendable () throws -> ClaudeCodeCredentials.Token = { try ClaudeCodeCredentials.read() },
+        tokenSource: @escaping @Sendable () throws -> AccessToken = { try ClaudeCodeCredentials.read() },
         snapshot: UsageSnapshot? = nil,
         plan: Plan? = nil,
         planFetchedAt: Date? = nil,
@@ -100,7 +100,7 @@ public final class UsageService {
             onChange?()
         }
 
-        let token: ClaudeCodeCredentials.Token
+        let token: AccessToken
         do {
             token = try tokenSource()
         } catch {
@@ -109,21 +109,21 @@ public final class UsageService {
         }
 
         // The token that succeeded; the plan goes out with it, never with a rejected one.
-        let working: String
+        let working: AccessToken
         do {
-            snapshot = try await fetcher.fetchUsage(token: token.accessToken)
+            snapshot = try await fetcher.fetchUsage(token: token)
             problem = nil
-            working = token.accessToken
+            working = token
         } catch .unauthorized {
             // Claude Code may have rotated the token since the read. One re-read, one retry.
-            guard let fresh = try? tokenSource(), fresh.accessToken != token.accessToken else {
+            guard let fresh = try? tokenSource(), fresh != token else {
                 problem = .tokenRejected
                 return
             }
             do {
-                snapshot = try await fetcher.fetchUsage(token: fresh.accessToken)
+                snapshot = try await fetcher.fetchUsage(token: fresh)
                 problem = nil
-                working = fresh.accessToken
+                working = fresh
             } catch {
                 if case .unauthorized = error {
                     problem = .tokenRejected
@@ -140,7 +140,7 @@ public final class UsageService {
         await refreshPlanIfStale(token: working)
     }
 
-    private func refreshPlanIfStale(token: String) async {
+    private func refreshPlanIfStale(token: AccessToken) async {
         if let planFetchedAt, plan != nil, now().timeIntervalSince(planFetchedAt) < Self.planMaxAge { return }
         // The plan row is secondary; a failure here leaves the old value and no problem.
         if let fetched = try? await fetcher.fetchPlan(token: token) {
