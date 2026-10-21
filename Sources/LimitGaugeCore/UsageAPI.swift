@@ -15,8 +15,25 @@ public struct UsageAPI: Sendable {
 
     private let session: URLSession
 
-    public init(session: URLSession = .shared) {
+    public init() {
+        self.init(session: Self.makeSession())
+    }
+
+    init(session: URLSession) {
         self.session = session
+    }
+
+    /// Ephemeral, with no cache, cookie or credential store, so neither the bearer request nor
+    /// the /profile body (which holds the account email) reaches disk. The resource timeout
+    /// bounds every fetch a refresh waits on; the default is seven days.
+    static func makeSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.timeoutIntervalForResource = 30
+        return URLSession(configuration: configuration)
     }
 
     public func fetchUsage(token: String) async throws(Error) -> UsageSnapshot {
