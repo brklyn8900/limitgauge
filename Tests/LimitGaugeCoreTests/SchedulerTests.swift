@@ -92,3 +92,37 @@ private func snap(session: Int, week: Int, fable: Int) -> UsageSnapshot {
         #expect(WarningKey(a) != WarningKey(b))
     }
 }
+
+@Suite struct WarningKeyTests {
+    /// The endpoint shifts `resets_at` by under a second between fetches in one window. Both
+    /// values were captured from the live endpoint on 2026-10-21.
+    @Test func jitteredResetsShareAKey() throws {
+        let a = try #require(ISO8601.date("2026-10-21T21:10:00.462+00:00"))
+        let b = try #require(ISO8601.date("2026-10-21T21:09:59.776+00:00"))
+        let first = WarningKey(RateLimit(kind: .weeklyScoped, percent: 83, resetsAt: a, scopeName: "Fable"))
+        let second = WarningKey(RateLimit(kind: .weeklyScoped, percent: 83, resetsAt: b, scopeName: "Fable"))
+        #expect(first == second)
+    }
+
+    @Test func aDifferentWindowIsADifferentKey() {
+        let a = WarningKey(RateLimit(kind: .session, percent: 90, resetsAt: weekReset))
+        let b = WarningKey(RateLimit(kind: .session, percent: 90, resetsAt: weekReset.addingTimeInterval(5 * 3600)))
+        #expect(a != b)
+    }
+
+    /// Keys saved before rounding existed decode rounded, so the upgrade does not repeat a
+    /// warning already posted in the current window.
+    @Test func keysPersistedBeforeRoundingDecodeRounded() throws {
+        let raw = try #require(ISO8601.date("2026-10-21T21:10:00.462+00:00"))
+        let json = try JSONEncoder().encode(LegacyKey(kind: "session", resetsAt: raw))
+        let decoded = try JSONDecoder().decode(WarningKey.self, from: json)
+        #expect(decoded == WarningKey(RateLimit(kind: .session, percent: 90, resetsAt: raw)))
+        #expect(decoded.resetsAt.timeIntervalSince1970.truncatingRemainder(dividingBy: 60) == 0)
+    }
+}
+
+/// A key as the synthesized encoder wrote it before rounding.
+private struct LegacyKey: Encodable {
+    var kind: String
+    var resetsAt: Date
+}
