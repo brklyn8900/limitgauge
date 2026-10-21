@@ -69,12 +69,23 @@ import Testing
     @Test func pastDetection() {
         let t = WarningThresholds.default
         let now = Date()
+        let later = now.addingTimeInterval(3600)
         let snap = UsageSnapshot(limits: [
-            RateLimit(kind: .session, percent: 79, resetsAt: now),
-            RateLimit(kind: .weeklyScoped, percent: 80, resetsAt: now),
+            RateLimit(kind: .session, percent: 79, resetsAt: later),
+            RateLimit(kind: .weeklyScoped, percent: 80, resetsAt: later),
         ], fetchedAt: now)
-        #expect(!t.isPast(snap.limits[0]))
-        #expect(t.isPast(snap.limits[1]))
-        #expect(t.anyPast(in: snap))
+        #expect(t.state(of: snap.limits[0], at: now) == .below(headroom: 1))
+        #expect(t.state(of: snap.limits[1], at: now) == .past)
+        #expect(t.anyPast(in: snap, at: now))
+    }
+
+    /// A limit whose window has reset since the fetch is unknown: not past, so off the dot.
+    @Test func resetLimitIsUnknownAndLeavesTheDot() {
+        let t = WarningThresholds.default
+        let now = Date()
+        let snap = UsageSnapshot(limits: [RateLimit(kind: .session, percent: 95, resetsAt: now.addingTimeInterval(-1))],
+                                 fetchedAt: now.addingTimeInterval(-3600))
+        #expect(t.state(of: snap.limits[0], at: now) == .reset)
+        #expect(!t.anyPast(in: snap, at: now))
     }
 }

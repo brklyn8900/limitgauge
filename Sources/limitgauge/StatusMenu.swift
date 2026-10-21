@@ -125,7 +125,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 items.append(MenuRows.idleSession())
             }
             for limit in snapshot.limits {
-                items.append(MenuRows.limit(limit, now: now, past: thresholds.isPast(limit)))
+                items.append(MenuRows.limit(limit, state: thresholds.state(of: limit, at: now), now: now))
             }
 
             var extras: [NSMenuItem] = []
@@ -171,7 +171,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func updateIcon() {
         item.button?.image = StatusIcon.image(for: Settings.icon)
-        let past = service.snapshot.map { Settings.thresholds.anyPast(in: $0) } ?? false
+        let past = service.snapshot.map { Settings.thresholds.anyPast(in: $0, at: Date()) } ?? false
         warningDot.isHidden = !(past && Settings.showsWarningDot)
     }
 }

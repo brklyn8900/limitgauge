@@ -7,9 +7,16 @@ enum MenuRows {
     static let width: CGFloat = 300
     private static let inset: CGFloat = 14
 
-    /// Title, percent, bar and reset time.
-    static func limit(_ limit: RateLimit, now: Date, past: Bool) -> NSMenuItem {
-        gauge(title: limit.title, percent: limit.percent, caption: ResetText.resets(at: limit.resetsAt, now: now), past: past)
+    /// Title, percent, bar and reset time. A limit whose window has reset since the fetch
+    /// shows a dash, an empty bar and no red: its value is unknown (ADR-0005 point 4).
+    static func limit(_ limit: RateLimit, state: LimitState, now: Date) -> NSMenuItem {
+        switch state {
+        case .below, .past:
+            gauge(title: limit.title, percent: limit.percent,
+                  caption: ResetText.resets(at: limit.resetsAt, now: now), past: state == .past)
+        case .reset:
+            gauge(title: limit.title, percent: nil, caption: "Reset since the last update", past: false)
+        }
     }
 
     /// The session row when the endpoint reports no session: no five-hour window is open,
@@ -18,9 +25,10 @@ enum MenuRows {
         gauge(title: RateLimit.Kind.session.title, percent: 0, caption: nil, past: false)
     }
 
-    private static func gauge(title: String, percent: Int, caption: String?, past: Bool) -> NSMenuItem {
+    /// `percent` nil: the value is unknown, so the label reads a dash and the bar is empty.
+    private static func gauge(title: String, percent: Int?, caption: String?, past: Bool) -> NSMenuItem {
         let titleLabel = label(title, font: .systemFont(ofSize: 13, weight: .medium))
-        let percentLabel = label("\(percent)%", font: .monospacedDigitSystemFont(ofSize: 13, weight: .medium))
+        let percentLabel = label(percent.map { "\($0)%" } ?? "\u{2013}", font: .monospacedDigitSystemFont(ofSize: 13, weight: .medium))
         percentLabel.textColor = past ? .systemRed : .labelColor
         let header = NSStackView(views: [titleLabel, NSView(), percentLabel])
         header.orientation = .horizontal
@@ -28,7 +36,7 @@ enum MenuRows {
         titleLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         percentLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        let bar = BarView(fraction: Double(percent) / 100, warning: past)
+        let bar = BarView(fraction: Double(percent ?? 0) / 100, warning: past)
         bar.heightAnchor.constraint(equalToConstant: 6).isActive = true
 
         var rows: [NSView] = [header, bar]

@@ -125,7 +125,7 @@ public final class UsageService {
     @discardableResult
     public func settingsChanged() -> Task<Void, Never> {
         if let snapshot {
-            let past = snapshot.limits.filter { thresholds().isPast($0) }.map { WarningKey($0) }
+            let past = snapshot.limits.filter { thresholds().state(of: $0, at: now()) == .past }.map { WarningKey($0) }
             setFired(fired.intersection(past))
         }
         onChange?()
@@ -238,7 +238,7 @@ public final class UsageService {
     /// hold the refresh and stop polling.
     private func deliverDueWarnings() async {
         guard let snapshot else { return }
-        let outcome = WarningTracker.evaluate(snapshot: snapshot, thresholds: thresholds(), fired: fired)
+        let outcome = WarningTracker.evaluate(snapshot: snapshot, thresholds: thresholds(), fired: fired, at: now())
         setFired(outcome.fired)
         let due = outcome.due.filter { !delivering.contains(WarningKey($0)) }
         let keys = Set(due.map { WarningKey($0) })

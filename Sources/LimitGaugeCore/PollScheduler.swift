@@ -134,14 +134,19 @@ enum WarningTracker {
         var fired: Set<WarningKey>
     }
 
+    /// A limit whose window has reset since the fetch is unknown and never due (ADR-0005
+    /// point 4).
     static func evaluate(
         snapshot: UsageSnapshot,
         thresholds: WarningThresholds,
-        fired previous: Set<WarningKey>
+        fired previous: Set<WarningKey>,
+        at now: Date
     ) -> Outcome {
         let fired = previous.intersection(snapshot.limits.map { WarningKey($0) })
         var seen = fired
-        let due = snapshot.limits.filter { thresholds.isPast($0) && seen.insert(WarningKey($0)).inserted }
+        let due = snapshot.limits.filter {
+            thresholds.state(of: $0, at: now) == .past && seen.insert(WarningKey($0)).inserted
+        }
         return Outcome(due: due, fired: fired)
     }
 }

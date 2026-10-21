@@ -110,12 +110,12 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
     /// Due until delivered; the caller marks it fired, and then it is due no more.
     @Test func firesOncePerWindow() {
         let s = snap(session: 85, week: 20, fable: 10)
-        let first = WarningTracker.evaluate(snapshot: s, thresholds: t, fired: [])
+        let first = WarningTracker.evaluate(snapshot: s, thresholds: t, fired: [], at: now)
         #expect(first.due.map(\.kind) == [.session])
         #expect(first.fired.isEmpty)
 
         let delivered: Set<WarningKey> = [WarningKey(s.limits[0])]
-        let again = WarningTracker.evaluate(snapshot: snap(session: 95, week: 20, fable: 10), thresholds: t, fired: delivered)
+        let again = WarningTracker.evaluate(snapshot: snap(session: 95, week: 20, fable: 10), thresholds: t, fired: delivered, at: now)
         #expect(again.due.isEmpty)
         #expect(again.fired == delivered)
     }
@@ -127,21 +127,28 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         var next = s
         next.limits[0].resetsAt = sessionReset.addingTimeInterval(5 * 3600)
         next.limits[0].percent = 82
-        let second = WarningTracker.evaluate(snapshot: next, thresholds: t, fired: delivered)
+        let second = WarningTracker.evaluate(snapshot: next, thresholds: t, fired: delivered, at: now)
         #expect(second.due.map(\.kind) == [.session])
         // The old window's key is gone.
         #expect(second.fired.isEmpty)
     }
 
     @Test func belowThresholdFiresNothing() {
-        let out = WarningTracker.evaluate(snapshot: snap(session: 79, week: 84, fable: 79), thresholds: t, fired: [])
+        let out = WarningTracker.evaluate(snapshot: snap(session: 79, week: 84, fable: 79), thresholds: t, fired: [], at: now)
         #expect(out.due.isEmpty)
         #expect(out.fired.isEmpty)
     }
 
     @Test func severalAtOnce() {
-        let out = WarningTracker.evaluate(snapshot: snap(session: 80, week: 85, fable: 80), thresholds: t, fired: [])
+        let out = WarningTracker.evaluate(snapshot: snap(session: 80, week: 85, fable: 80), thresholds: t, fired: [], at: now)
         #expect(out.due.count == 3)
+    }
+
+    /// A limit whose window has reset since the fetch is unknown and never due.
+    @Test func limitPastItsResetIsNotDue() {
+        let s = snap(session: 90, week: 20, fable: 10)
+        let out = WarningTracker.evaluate(snapshot: s, thresholds: t, fired: [], at: sessionReset.addingTimeInterval(1))
+        #expect(out.due.isEmpty)
     }
 
     @Test func scopedKeysIncludeTheScope() {

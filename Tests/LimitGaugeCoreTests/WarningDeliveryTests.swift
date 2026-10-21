@@ -87,3 +87,16 @@ final class GatedDelivery: WarningDelivery {
         #expect(delivery.offered.count == 1)
     }
 }
+
+@MainActor
+@Suite struct ResetLimitTests {
+    /// Today a limit whose window reset while fetches failed still warns with its old percent.
+    @Test func limitPastItsResetDoesNotWarn() async {
+        let stale = UsageSnapshot(limits: [RateLimit(kind: .session, percent: 90, resetsAt: t0.addingTimeInterval(-60))],
+                                  fetchedAt: t0.addingTimeInterval(-3 * 3600))
+        let delivery = RecordingDelivery()
+        let rig = Rig(seed: stale, delivery: delivery)
+        await rig.service.settingsChanged().value
+        #expect(delivery.offered.isEmpty)
+    }
+}

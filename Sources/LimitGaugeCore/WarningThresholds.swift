@@ -23,15 +23,14 @@ public struct WarningThresholds: Equatable, Sendable, Codable {
         }
     }
 
-    public func isPast(_ limit: RateLimit) -> Bool {
-        limit.percent >= threshold(for: limit.kind)
+    /// Drives the warning dot. A limit whose window has reset is unknown, not past.
+    public func anyPast(in snapshot: UsageSnapshot, at now: Date) -> Bool {
+        snapshot.limits.contains { state(of: $0, at: now) == .past }
     }
 
-    public func anyPast(in snapshot: UsageSnapshot) -> Bool {
-        snapshot.limits.contains(where: isPast)
-    }
-
-    /// Where a limit stands against its threshold at `now`.
+    /// Where a limit stands against its threshold at `now`. The menu row, the warning dot,
+    /// the warnings and the scheduler all read this one function, so "past" and "reset" mean
+    /// the same thing everywhere.
     public func state(of limit: RateLimit, at now: Date) -> LimitState {
         if limit.resetsAt <= now { return .reset }
         let headroom = threshold(for: limit.kind) - limit.percent
