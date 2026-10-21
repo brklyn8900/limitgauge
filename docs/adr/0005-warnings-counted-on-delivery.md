@@ -11,13 +11,15 @@ date: 2026-10-21
 ## Context
 
 The proposal's Warnings section says a warning posts once per limit and reset window, and a
-new `resets_at` re-arms it. Two things about how that was built proved wrong:
+new `resets_at` re-arms it. Three things about how that was built proved wrong:
 
 - The usage endpoint shifts `resets_at` by under a second between fetches in the same window
   (21:10:00.462, then 21:09:59.776, captured 2026-10-21). Keyed on the raw value, every fetch
   was a new window, and a limit past its threshold warned again on each fetch.
 - A warning was recorded as posted when it was decided, before anything was delivered. With
   notifications off in limitgauge or not allowed by macOS, that window's warning was lost.
+- A limit whose window had reset while fetches failed kept its old percent: still red, still
+  "Resets now", still lighting the warning dot.
 
 The proposal is frozen, so these rules are recorded here.
 
@@ -32,6 +34,8 @@ The proposal is frozen, so these rules are recorded here.
    refresh or settings change, including when notifications are turned on.
 3. The notification's identifier is derived from the key, so delivering the same warning
    twice replaces it instead of stacking a second one.
+4. A limit whose window has reset since the last fetch is unknown: the menu shows a dash and
+   an empty bar, it does not light the warning dot, and it does not warn.
 
 ## Consequences
 
