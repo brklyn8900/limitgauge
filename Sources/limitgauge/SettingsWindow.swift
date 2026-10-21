@@ -165,7 +165,11 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
             let denied = status == .denied
             permissionNote.stringValue = denied
                 ? "Notifications are turned off for limitgauge in System Settings."
-                : (status == .notDetermined ? "macOS will ask for permission on the first warning." : "")
+                : (status == .notDetermined
+                    ? (Settings.notificationsEnabled
+                        ? "macOS asks for permission when limitgauge launches."
+                        : "macOS asks for permission when you turn notifications on.")
+                    : "")
             // Hide the rows, not just the views, so the grid gives their space back.
             grid?.cell(for: permissionNote)?.row?.isHidden = permissionNote.stringValue.isEmpty
             grid?.cell(for: openSystemSettings)?.row?.isHidden = !denied
