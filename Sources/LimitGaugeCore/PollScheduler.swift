@@ -32,6 +32,12 @@ public struct WarningKey: Hashable, Sendable, Codable {
         kind = try container.decode(String.self, forKey: .kind)
         resetsAt = try container.decode(Date.self, forKey: .resetsAt).nearestMinute
     }
+
+    /// Stable per warning, so delivering the same warning twice replaces the notification
+    /// instead of stacking a second one (ADR-0005 point 3).
+    public var notificationIdentifier: String {
+        "\(kind)@\(Int(resetsAt.timeIntervalSince1970))"
+    }
 }
 
 extension Date {
@@ -110,33 +116,32 @@ enum PollScheduler {
 /// Shows a warning to the user. The app's `Notifier` is the only production conformer; it
 /// stays in the app because Notification Center needs the app bundle.
 @MainActor
-public protocol WarningDelivery: AnyObject {
-    /// True once Notification Center has accepted the request.
-    func deliver(_ limit: RateLimit, now: Date) async -> Bool
+public protocol WarningDelivery: AnyObject, Sendable {
+    /// True once Notification Center has accepted the request. False when notifications are
+    /// off in limitgauge or not allowed by macOS, or the request failed; the warning then
+    /// stays due and is offered again (ADR-0005 point 2). `identifier` is the request's
+    /// identifier, stable per warning.
+    func deliver(_ limit: RateLimit, identifier: String, now: Date) async -> Bool
 }
 
-/// Which warnings to post for a snapshot, and the fired set to carry forward.
-public enum WarningTracker {
-    public struct Outcome: Equatable, Sendable {
-        public var toNotify: [RateLimit]
-        public var fired: Set<WarningKey>
+/// Which warnings are due for a snapshot, and the fired set to carry forward. A warning is
+/// fired when it is delivered, not when it is due, so marking it is the caller's job.
+enum WarningTracker {
+    struct Outcome: Equatable, Sendable {
+        /// Limits past their threshold whose warning has not been delivered in this window.
+        var due: [RateLimit]
+        /// `fired` without the keys of windows that have passed, so the next window can fire.
+        var fired: Set<WarningKey>
     }
 
-    public static func evaluate(
+    static func evaluate(
         snapshot: UsageSnapshot,
         thresholds: WarningThresholds,
         fired previous: Set<WarningKey>
     ) -> Outcome {
-        // Keys whose window has passed drop out, so the next window can fire again.
-        let current = Set(snapshot.limits.map { WarningKey($0) })
-        var fired = previous.intersection(current)
-        var toNotify: [RateLimit] = []
-        for limit in snapshot.limits where thresholds.isPast(limit) {
-            let key = WarningKey(limit)
-            if fired.insert(key).inserted {
-                toNotify.append(limit)
-            }
-        }
-        return Outcome(toNotify: toNotify, fired: fired)
+        let fired = previous.intersection(snapshot.limits.map { WarningKey($0) })
+        var seen = fired
+        let due = snapshot.limits.filter { thresholds.isPast($0) && seen.insert(WarningKey($0)).inserted }
+        return Outcome(due: due, fired: fired)
     }
 }

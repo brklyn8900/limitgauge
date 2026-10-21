@@ -66,6 +66,9 @@ public final class UsageService {
     private var fetchedPlan: FetchedPlan?
     /// Warnings already posted, per window (mirrors the store).
     private var fired: Set<WarningKey>
+    /// Warnings handed to `delivery` and not yet answered. A settings change during a refresh's
+    /// delivery must not post the same warning twice.
+    private var delivering: Set<WarningKey> = []
     private var inFlight: Task<RefreshOutcome, Never>?
     /// The token the endpoint last rejected, in memory only. A poll that reads it again sends
     /// nothing; launch, menu open and Refresh still send it. Cleared by any success.
@@ -77,6 +80,9 @@ public final class UsageService {
     private let delivery: any WarningDelivery
     private let thresholds: @MainActor () -> WarningThresholds
     private let now: @Sendable () -> Date
+    /// How long one delivery may hold the refresh before it is abandoned as not delivered.
+    /// Internal so tests can shorten it.
+    var deliveryTimeout: Duration = .seconds(10)
 
     /// Snapshot, plan and posted warnings load from `store`, the one place they persist.
     public init(
@@ -227,13 +233,23 @@ public final class UsageService {
         }
     }
 
-    /// Posts warnings for limits newly past their threshold in this window.
+    /// Offers every due warning and records the ones Notification Center accepted
+    /// (ADR-0005 point 2). Each delivery is bounded by `deliveryTimeout`, so a hung one cannot
+    /// hold the refresh and stop polling.
     private func deliverDueWarnings() async {
         guard let snapshot else { return }
         let outcome = WarningTracker.evaluate(snapshot: snapshot, thresholds: thresholds(), fired: fired)
         setFired(outcome.fired)
-        for limit in outcome.toNotify {
-            _ = await delivery.deliver(limit, now: now())
+        let due = outcome.due.filter { !delivering.contains(WarningKey($0)) }
+        let keys = Set(due.map { WarningKey($0) })
+        delivering.formUnion(keys)
+        defer { delivering.subtract(keys) }
+        for limit in due {
+            let key = WarningKey(limit)
+            let accepted = await Deadline.race(deliveryTimeout) { [delivery, now] in
+                await delivery.deliver(limit, identifier: key.notificationIdentifier, now: now())
+            } ?? false
+            if accepted { setFired(fired.union([key])) }
         }
     }
 

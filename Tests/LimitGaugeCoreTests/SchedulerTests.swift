@@ -107,41 +107,41 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
 @Suite struct WarningTrackerTests {
     let t = WarningThresholds.default
 
+    /// Due until delivered; the caller marks it fired, and then it is due no more.
     @Test func firesOncePerWindow() {
         let s = snap(session: 85, week: 20, fable: 10)
         let first = WarningTracker.evaluate(snapshot: s, thresholds: t, fired: [])
-        #expect(first.toNotify.map(\.kind) == [.session])
-        #expect(first.fired.count == 1)
+        #expect(first.due.map(\.kind) == [.session])
+        #expect(first.fired.isEmpty)
 
-        let again = WarningTracker.evaluate(snapshot: snap(session: 95, week: 20, fable: 10), thresholds: t, fired: first.fired)
-        #expect(again.toNotify.isEmpty)
-        #expect(again.fired == first.fired)
+        let delivered: Set<WarningKey> = [WarningKey(s.limits[0])]
+        let again = WarningTracker.evaluate(snapshot: snap(session: 95, week: 20, fable: 10), thresholds: t, fired: delivered)
+        #expect(again.due.isEmpty)
+        #expect(again.fired == delivered)
     }
 
     @Test func newWindowRearms() {
         let s = snap(session: 85, week: 20, fable: 10)
-        let first = WarningTracker.evaluate(snapshot: s, thresholds: t, fired: [])
+        let delivered: Set<WarningKey> = [WarningKey(s.limits[0])]
 
         var next = s
         next.limits[0].resetsAt = sessionReset.addingTimeInterval(5 * 3600)
         next.limits[0].percent = 82
-        let second = WarningTracker.evaluate(snapshot: next, thresholds: t, fired: first.fired)
-        #expect(second.toNotify.map(\.kind) == [.session])
-        // The old window's key is gone, the new one is in.
-        #expect(second.fired.count == 1)
-        #expect(!second.fired.contains(WarningKey(s.limits[0])))
+        let second = WarningTracker.evaluate(snapshot: next, thresholds: t, fired: delivered)
+        #expect(second.due.map(\.kind) == [.session])
+        // The old window's key is gone.
+        #expect(second.fired.isEmpty)
     }
 
     @Test func belowThresholdFiresNothing() {
         let out = WarningTracker.evaluate(snapshot: snap(session: 79, week: 84, fable: 79), thresholds: t, fired: [])
-        #expect(out.toNotify.isEmpty)
+        #expect(out.due.isEmpty)
         #expect(out.fired.isEmpty)
     }
 
     @Test func severalAtOnce() {
         let out = WarningTracker.evaluate(snapshot: snap(session: 80, week: 85, fable: 80), thresholds: t, fired: [])
-        #expect(out.toNotify.count == 3)
-        #expect(out.fired.count == 3)
+        #expect(out.due.count == 3)
     }
 
     @Test func scopedKeysIncludeTheScope() {

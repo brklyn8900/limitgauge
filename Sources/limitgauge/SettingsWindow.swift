@@ -187,8 +187,12 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 
     @objc private func notificationsChanged() {
         Settings.notificationsEnabled = notifications.state == .on
-        if Settings.notificationsEnabled { notifier.requestAuthorizationIfEnabled() }
-        refreshPermissionNote()
+        Task {
+            if Settings.notificationsEnabled { await notifier.requestAuthorizationIfEnabled() }
+            // A warning that was due while notifications were off goes out now (ADR-0005).
+            onChange()
+            refreshPermissionNote()
+        }
     }
 
     @objc private func openNotificationSettings() {

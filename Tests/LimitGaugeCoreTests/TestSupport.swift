@@ -37,13 +37,15 @@ final class ScriptedFetcher: UsageFetching, @unchecked Sendable {
 final class RecordingDelivery: WarningDelivery {
     var accepting: Bool
     private(set) var offered: [RateLimit] = []
+    private(set) var identifiers: [String] = []
 
     init(accepting: Bool = true) {
         self.accepting = accepting
     }
 
-    func deliver(_ limit: RateLimit, now: Date) async -> Bool {
+    func deliver(_ limit: RateLimit, identifier: String, now: Date) async -> Bool {
         offered.append(limit)
+        identifiers.append(identifier)
         return accepting
     }
 }
@@ -78,7 +80,7 @@ func failing(_ error: CredentialError) -> TokenReader {
 final class Rig {
     let store: SnapshotStore
     let fetcher: ScriptedFetcher
-    let delivery: RecordingDelivery
+    let delivery: any WarningDelivery
     let clock: TestClock
     let service: UsageService
     /// An absolute path makes the domain a plist in the temporary directory, so test runs
@@ -92,7 +94,7 @@ final class Rig {
         readToken: @escaping TokenReader = reading("a"),
         seed: UsageSnapshot? = nil,
         seedPlan: Plan? = nil,
-        delivery: RecordingDelivery = RecordingDelivery(),
+        delivery: any WarningDelivery = RecordingDelivery(),
         thresholds: WarningThresholds = .default,
         clock: TestClock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
     ) {
@@ -104,6 +106,7 @@ final class Rig {
         self.clock = clock
         service = UsageService(readToken: readToken, fetcher: fetcher, store: store, delivery: delivery,
                                thresholds: { thresholds }, now: { clock.now })
+        service.deliveryTimeout = .milliseconds(200)
     }
 
     deinit {

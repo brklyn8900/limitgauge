@@ -128,10 +128,12 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
 
     /// A warning is posted once per window, and the record of it survives a relaunch.
     @Test func warningIsPostedOncePerWindow() async {
-        let rig = Rig(usage: [.success(snapshot(at: t0, percent: 90)), .success(snapshot(at: t0, percent: 95))])
+        let delivery = RecordingDelivery()
+        let rig = Rig(usage: [.success(snapshot(at: t0, percent: 90)), .success(snapshot(at: t0, percent: 95))],
+                      delivery: delivery)
         _ = await rig.service.refresh(.refreshRow).value
         _ = await rig.service.refresh(.refreshRow).value
-        #expect(rig.delivery.offered.map(\.percent) == [90])
+        #expect(delivery.offered.map(\.percent) == [90])
         #expect(rig.store.loadFiredWarnings().count == 1)
     }
 }
