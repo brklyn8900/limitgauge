@@ -36,9 +36,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func serviceChanged() {
         store.save(snapshot: service.snapshot)
         store.save(plan: service.plan, fetchedAt: service.planFetchedAt)
-        if let problem = service.problem {
-            Log.fetch.error("usage fetch: \(problem.message, privacy: .public)")
-        }
         if !service.isRefreshing { evaluateWarnings() }
         statusMenu.update()
     }

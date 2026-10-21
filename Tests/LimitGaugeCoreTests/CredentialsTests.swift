@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import LimitGaugeCore
 
@@ -6,6 +7,11 @@ import Testing
 private func standIn(_ script: String, timeout: Duration = .seconds(5)) -> ClaudeCodeCredentials {
     ClaudeCodeCredentials(command: .init(tool: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", script]),
                           timeout: timeout)
+}
+
+/// The service's token source over a reader.
+private func reading(_ reader: ClaudeCodeCredentials) -> TokenReader {
+    { () async throws(CredentialError) -> AccessToken in try await reader.read() }
 }
 
 private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
@@ -20,7 +26,7 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
 
         let clock = ContinuousClock()
         let start = clock.now
-        await #expect(throws: ClaudeCodeCredentials.Error.timedOut) { try await reader.read() }
+        await #expect(throws: CredentialError.timedOut) { try await reader.read() }
         #expect(clock.now - start < .seconds(2))
 
         let pid = try #require(pid_t(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
@@ -37,15 +43,15 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         #expect(token.value == "sk-ant-oat01-test")
     }
 
-    @Test(arguments: [(Int32(44), ClaudeCodeCredentials.Error.notFound),
-                      (36, .accessDenied), (128, .accessDenied), (7, .security(exitCode: 7))])
-    func exitCodesMapToErrors(code: Int32, error: ClaudeCodeCredentials.Error) async {
+    @Test(arguments: [(Int32(44), CredentialError.notFound), (36, .refused(exitCode: 36)),
+                      (51, .refused(exitCode: 51)), (128, .refused(exitCode: 128)), (7, .failed(exitCode: 7))])
+    func exitCodesMapToErrors(code: Int32, error: CredentialError) async {
         await #expect(throws: error) { try await standIn("exit \(code)").read() }
     }
 
     /// More than a pipe buffer of output must not stall the tool.
     @Test func largeOutputIsDrained() async {
-        await #expect(throws: ClaudeCodeCredentials.Error.malformed) {
+        await #expect(throws: CredentialError.malformed) {
             try await standIn("head -c 300000 /dev/zero").read()
         }
     }
@@ -57,7 +63,7 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
     @Test func readLeavesTheMainActorFree() async throws {
         let reader = standIn("/bin/sleep 0.5; printf '%s' '\(item)'")
         let fetcher = ScriptedFetcher(usage: [])
-        let service = UsageService(fetcher: fetcher, tokenSource: { try await reader.read() })
+        let service = UsageService(fetcher: fetcher, tokenSource: reading(reader))
         let clock = ContinuousClock()
         let start = clock.now
         let refresh = service.refresh()
@@ -66,5 +72,65 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         await refresh.value
         #expect(mainRan < .milliseconds(300))
         #expect(fetcher.usageTokens == ["sk-ant-oat01-test"])
+    }
+}
+
+@MainActor
+@Suite struct CredentialProblemTests {
+    private func problem(after reader: ClaudeCodeCredentials) async -> (UsageProblem?, [String]) {
+        let fetcher = ScriptedFetcher(usage: [])
+        let service = UsageService(fetcher: fetcher, tokenSource: reading(reader))
+        await service.refresh().value
+        return (service.problem, fetcher.usageTokens)
+    }
+
+    /// Today a malformed item, exit 51 and a tool that cannot launch all say "Sign in with
+    /// Claude Code", which is wrong for a user who is signed in.
+    @Test func malformedRefusedAndLaunchFailureAreTheirOwnProblems() async {
+        let malformed = await problem(after: standIn("printf '{}'"))
+        let refused = await problem(after: standIn("exit 51"))
+        let launch = await problem(after: ClaudeCodeCredentials(
+            command: .init(tool: URL(fileURLWithPath: "/nonexistent/security"), arguments: []), timeout: .seconds(5)))
+        let problems = [malformed.0, refused.0, launch.0]
+        #expect(!problems.contains(.noCredentials))
+        #expect(Set(problems.compactMap { $0.map { "\($0)" } }).count == 3)
+        #expect(malformed.1 + refused.1 + launch.1 == [])
+    }
+}
+
+@Suite struct CredentialMappingTests {
+    @Test(arguments: [
+        (CredentialError.notFound, UsageProblem.noCredentials),
+        (.refused(exitCode: 36), .keychainDenied), (.refused(exitCode: 51), .keychainDenied),
+        (.refused(exitCode: 128), .keychainDenied), (.timedOut, .keychainDenied),
+        (.failed(exitCode: 7), .keychainToolFailed), (.launchFailed, .keychainToolFailed),
+        (.malformed, .credentialsUnreadable),
+    ])
+    func eachFailureHasItsProblem(error: CredentialError, problem: UsageProblem) {
+        #expect(RefreshFailure(error).problem == problem)
+    }
+
+    /// The log line names the cause with its code and nothing else.
+    @Test func logLinesCarryTheExitCode() {
+        #expect(RefreshFailure(CredentialError.refused(exitCode: 51)).logDescription == "security: refused (exit 51)")
+        #expect(RefreshFailure(CredentialError.failed(exitCode: 7)).logDescription == "security: exit 7")
+        #expect(RefreshFailure(UsageAPI.Error.decoding(.malformedJSON("{\"email\": \"x\"}"))).logDescription
+            == "usage: response unreadable (malformedJSON)")
+    }
+}
+
+@MainActor
+@Suite struct RereadTests {
+    /// A re-read after a 401 that fails reports its own problem; today try? hid it as a
+    /// rejected token.
+    @Test func failedRereadReportsItsOwnProblem() async {
+        let reads = Mutex(0)
+        let fetcher = ScriptedFetcher(usage: [.failure(.unauthorized)])
+        let service = UsageService(fetcher: fetcher, tokenSource: { () async throws(CredentialError) -> AccessToken in
+            if reads.withLock({ $0 += 1; return $0 }) == 1 { return AccessToken("old") }
+            throw .refused(exitCode: 36)
+        })
+        await service.refresh().value
+        #expect(service.problem == .keychainDenied)
     }
 }

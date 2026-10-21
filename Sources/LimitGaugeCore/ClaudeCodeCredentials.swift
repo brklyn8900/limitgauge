@@ -7,21 +7,31 @@ public struct AccessToken: Equatable, Sendable, CustomStringConvertible, CustomD
     CustomReflectable
 {
     let value: String
-    public var expiresAt: Date?
 
-    init(_ value: String, expiresAt: Date? = nil) {
+    init(_ value: String) {
         self.value = value
-        self.expiresAt = expiresAt
-    }
-
-    public var isExpired: Bool {
-        guard let expiresAt else { return false }
-        return expiresAt <= Date()
     }
 
     public var description: String { "AccessToken(redacted)" }
     public var debugDescription: String { description }
     public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+
+/// Why the token could not be read (ADR-0004 point 2). No case carries the tool's output, so
+/// no case can leak it.
+public enum CredentialError: Error, Equatable, Sendable {
+    /// Exit 44: no item. Claude Code has never signed in on this machine.
+    case notFound
+    /// Exit 36, 51 or 128: the keychain is locked, or the read was refused or cancelled.
+    case refused(exitCode: Int32)
+    /// No exit within the deadline; the tool was terminated (ADR-0004 point 3).
+    case timedOut
+    /// Any other exit code.
+    case failed(exitCode: Int32)
+    /// `/usr/bin/security` could not be launched.
+    case launchFailed
+    /// The item was read but holds no `claudeAiOauth.accessToken` string.
+    case malformed
 }
 
 /// Reads the access token Claude Code keeps in the login Keychain. Read-only by design:
@@ -53,27 +63,14 @@ public struct ClaudeCodeCredentials: Sendable {
         self.timeout = timeout
     }
 
-    public enum Error: Swift.Error, Equatable {
-        /// No item named `service`. Claude Code has never signed in on this machine.
-        case notFound
-        /// The read was refused, cancelled, or did not finish: a locked keychain or a dialog
-        /// that was not answered.
-        case accessDenied
-        /// The security tool failed with an exit code not covered above.
-        case security(exitCode: Int32)
-        case malformed
-        /// No exit within the deadline; the tool was terminated (ADR-0004 point 3).
-        case timedOut
-    }
-
     /// Suspends, never blocks, for the whole read, and is bounded by `timeout` whatever the
     /// tool does (ADR-0004 point 3).
-    public func read() async throws(Error) -> AccessToken {
+    public func read() async throws(CredentialError) -> AccessToken {
         let exit: ToolRun.Exit
         do {
             exit = try await ToolRun.run(command, timeout: timeout)
         } catch .launchFailed {
-            throw .security(exitCode: -1)
+            throw .launchFailed
         } catch {
             throw .timedOut
         }
@@ -81,24 +78,25 @@ public struct ClaudeCodeCredentials: Sendable {
         return try Self.parse(exit.stdout)
     }
 
-    /// Exit codes of `security` as Claude Code relies on them: 44 for a missing item, 36 when
-    /// interaction is not allowed, 128 when the user cancels a dialog.
-    static func error(forExitCode code: Int32) -> Error? {
+    /// `security` exits with the low byte of the Security framework's status: 44
+    /// errSecItemNotFound, 36 errSecInteractionNotAllowed, 51 errSecAuthFailed, 128
+    /// errSecUserCanceled.
+    static func error(forExitCode code: Int32) -> CredentialError? {
         switch code {
         case 0: return nil
         case 44: return .notFound
-        case 36, 128: return .accessDenied
-        default: return .security(exitCode: code)
+        case 36, 51, 128: return .refused(exitCode: code)
+        default: return .failed(exitCode: code)
         }
     }
 
-    /// The item is JSON: {"claudeAiOauth": {"accessToken": ..., "expiresAt": <ms since 1970>, ...}}.
-    static func parse(_ data: Data) throws(Error) -> AccessToken {
+    /// The item is JSON: {"claudeAiOauth": {"accessToken": ..., ...}}. Only `accessToken` is
+    /// read; `expiresAt` is ignored on purpose (ADR-0004 point 1).
+    static func parse(_ data: Data) throws(CredentialError) -> AccessToken {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let oauth = root["claudeAiOauth"] as? [String: Any],
               let token = oauth["accessToken"] as? String, !token.isEmpty
         else { throw .malformed }
-        let expiresAt = (oauth["expiresAt"] as? Double).map { Date(timeIntervalSince1970: $0 / 1000) }
-        return AccessToken(token, expiresAt: expiresAt)
+        return AccessToken(token)
     }
 }

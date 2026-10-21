@@ -122,11 +122,11 @@ private func token(_ s: String) -> AccessToken {
 
     @Test func keychainErrorsMapToProblems() async {
         let fetcher = ScriptedFetcher(usage: [])
-        let missing = UsageService(fetcher: fetcher, tokenSource: { throw ClaudeCodeCredentials.Error.notFound })
+        let missing = UsageService(fetcher: fetcher, tokenSource: { () async throws(CredentialError) -> AccessToken in throw .notFound })
         await missing.refresh().value
         #expect(missing.problem == .noCredentials)
 
-        let denied = UsageService(fetcher: fetcher, tokenSource: { throw ClaudeCodeCredentials.Error.accessDenied })
+        let denied = UsageService(fetcher: fetcher, tokenSource: { () async throws(CredentialError) -> AccessToken in throw .refused(exitCode: 36) })
         await denied.refresh().value
         #expect(denied.problem == .keychainDenied)
         #expect(fetcher.usageTokens.isEmpty)

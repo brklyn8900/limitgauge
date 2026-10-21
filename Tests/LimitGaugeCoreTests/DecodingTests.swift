@@ -179,8 +179,6 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
         """.utf8)
         let token = try ClaudeCodeCredentials.parse(data)
         #expect(token.value == "sk-ant-oat01-test")
-        #expect(token.expiresAt == Date(timeIntervalSince1970: 4102444800.241))
-        #expect(token.isExpired == false)
     }
 
     /// No textual form of the token may carry the secret, so no log line or crash dump can.
@@ -196,20 +194,22 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
     @Test func securityExitCodesMapToErrors() {
         #expect(ClaudeCodeCredentials.error(forExitCode: 0) == nil)
         #expect(ClaudeCodeCredentials.error(forExitCode: 44) == .notFound)
-        #expect(ClaudeCodeCredentials.error(forExitCode: 36) == .accessDenied)
-        #expect(ClaudeCodeCredentials.error(forExitCode: 128) == .accessDenied)
-        #expect(ClaudeCodeCredentials.error(forExitCode: 1) == .security(exitCode: 1))
+        #expect(ClaudeCodeCredentials.error(forExitCode: 36) == .refused(exitCode: 36))
+        #expect(ClaudeCodeCredentials.error(forExitCode: 51) == .refused(exitCode: 51))
+        #expect(ClaudeCodeCredentials.error(forExitCode: 128) == .refused(exitCode: 128))
+        #expect(ClaudeCodeCredentials.error(forExitCode: 1) == .failed(exitCode: 1))
     }
 
     @Test func missingTokenIsMalformed() {
         let data = Data(#"{"claudeAiOauth": {"refreshToken": "r"}}"#.utf8)
-        #expect(throws: ClaudeCodeCredentials.Error.malformed) {
+        #expect(throws: CredentialError.malformed) {
             try ClaudeCodeCredentials.parse(data)
         }
     }
 
-    @Test func expiredToken() throws {
+    /// The item's expiresAt is not read: the endpoint decides expiry (ADR-0004 point 1).
+    @Test func expiryIsNotTheReadersBusiness() throws {
         let data = Data(#"{"claudeAiOauth": {"accessToken": "t", "expiresAt": 1000}}"#.utf8)
-        #expect(try ClaudeCodeCredentials.parse(data).isExpired)
+        #expect(try ClaudeCodeCredentials.parse(data).value == "t")
     }
 }

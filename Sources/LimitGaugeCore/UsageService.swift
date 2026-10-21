@@ -1,28 +1,7 @@
 import Foundation
 
-/// What the menu shows instead of numbers when a fetch cannot produce them.
-public enum UsageProblem: Equatable, Sendable {
-    /// No Keychain item: Claude Code has never signed in on this machine.
-    case noCredentials
-    /// The Keychain prompt was denied.
-    case keychainDenied
-    /// The token is expired or was rejected twice.
-    case tokenRejected
-    case offline
-    case server(Int)
-    case decoding
-
-    public var message: String {
-        switch self {
-        case .noCredentials: return "Sign in with Claude Code to see usage."
-        case .keychainDenied: return "Keychain read was refused. Unlock the login keychain and refresh."
-        case .tokenRejected: return "Token expired. Run claude in a terminal to sign in again."
-        case .offline: return "Could not reach the usage endpoint."
-        case .server(let status): return "Usage endpoint returned \(status)."
-        case .decoding: return "Usage response could not be read."
-        }
-    }
-}
+/// How the service gets a token. Production reads the Keychain; tests return or throw.
+public typealias TokenReader = @Sendable () async throws(CredentialError) -> AccessToken
 
 public protocol UsageFetching: Sendable {
     func fetchUsage(token: AccessToken) async throws(UsageAPI.Error) -> UsageSnapshot
@@ -48,13 +27,15 @@ public final class UsageService {
     public var onChange: (() -> Void)?
 
     private let fetcher: any UsageFetching
-    private let tokenSource: @Sendable () async throws -> AccessToken
+    private let tokenSource: TokenReader
     private let now: @Sendable () -> Date
     private var inFlight: Task<Void, Never>?
 
     public init(
         fetcher: any UsageFetching,
-        tokenSource: @escaping @Sendable () async throws -> AccessToken = { try await ClaudeCodeCredentials().read() },
+        tokenSource: @escaping TokenReader = { () async throws(CredentialError) -> AccessToken in
+            try await ClaudeCodeCredentials().read()
+        },
         snapshot: UsageSnapshot? = nil,
         plan: Plan? = nil,
         planFetchedAt: Date? = nil,
@@ -100,40 +81,13 @@ public final class UsageService {
             onChange?()
         }
 
-        let token: AccessToken
-        do {
-            token = try await tokenSource()
-        } catch {
-            problem = Self.problem(for: error)
-            return
-        }
-
-        // The token that succeeded; the plan goes out with it, never with a rejected one.
         let working: AccessToken
         do {
-            snapshot = try await fetcher.fetchUsage(token: token)
+            working = try await fetchUsage()
             problem = nil
-            working = token
-        } catch .unauthorized {
-            // Claude Code may have rotated the token since the read. One re-read, one retry.
-            guard let fresh = try? await tokenSource(), fresh != token else {
-                problem = .tokenRejected
-                return
-            }
-            do {
-                snapshot = try await fetcher.fetchUsage(token: fresh)
-                problem = nil
-                working = fresh
-            } catch {
-                if case .unauthorized = error {
-                    problem = .tokenRejected
-                } else {
-                    problem = Self.problem(for: error)
-                }
-                return
-            }
         } catch {
-            problem = Self.problem(for: error)
+            problem = error.problem
+            Log.fetch.error("usage fetch failed: \(error.logDescription, privacy: .public)")
             return
         }
 
@@ -149,16 +103,36 @@ public final class UsageService {
         }
     }
 
-    private static func problem(for error: any Error) -> UsageProblem {
-        switch error {
-        case ClaudeCodeCredentials.Error.notFound: return .noCredentials
-        case ClaudeCodeCredentials.Error.accessDenied, ClaudeCodeCredentials.Error.timedOut: return .keychainDenied
-        case is ClaudeCodeCredentials.Error: return .noCredentials
-        case UsageAPI.Error.unauthorized: return .tokenRejected
-        case UsageAPI.Error.httpStatus(let status): return .server(status)
-        case UsageAPI.Error.decoding: return .decoding
-        case UsageAPI.Error.transport: return .offline
-        default: return .offline
+    /// ADR-0001: read the token; on 401 re-read once and retry once if it changed. Stores the
+    /// snapshot and returns the token that succeeded, so the plan never goes out with a
+    /// rejected one.
+    private func fetchUsage() async throws(RefreshFailure) -> AccessToken {
+        let token: AccessToken
+        do {
+            token = try await tokenSource()
+        } catch {
+            throw RefreshFailure(error)
+        }
+        do {
+            snapshot = try await fetcher.fetchUsage(token: token)
+            return token
+        } catch .unauthorized {
+            // Claude Code may have rotated the token since the read. One re-read, one retry.
+            let fresh: AccessToken
+            do {
+                fresh = try await tokenSource()
+            } catch {
+                throw RefreshFailure(error)
+            }
+            guard fresh != token else { throw .tokenUnchanged }
+            do {
+                snapshot = try await fetcher.fetchUsage(token: fresh)
+                return fresh
+            } catch {
+                throw RefreshFailure(error)
+            }
+        } catch {
+            throw RefreshFailure(error)
         }
     }
 }
