@@ -1,0 +1,113 @@
+import Foundation
+import Synchronization
+@testable import LimitGaugeCore
+
+/// Scripted fetcher: each call pops the next result for its endpoint.
+final class ScriptedFetcher: UsageFetching, @unchecked Sendable {
+    var usageResults: [Result<UsageSnapshot, UsageAPI.Error>]
+    var planResults: [Result<Plan, UsageAPI.Error>]
+    private(set) var usageTokens: [String] = []
+    private(set) var planTokens: [String] = []
+    private let lock = NSLock()
+
+    init(usage: [Result<UsageSnapshot, UsageAPI.Error>], plan: [Result<Plan, UsageAPI.Error>] = []) {
+        usageResults = usage
+        planResults = plan
+    }
+
+    func fetchUsage(token: AccessToken) async throws(UsageAPI.Error) -> UsageSnapshot {
+        let result: Result<UsageSnapshot, UsageAPI.Error> = lock.withLock {
+            usageTokens.append(token.value)
+            return usageResults.isEmpty ? .failure(.httpStatus(599)) : usageResults.removeFirst()
+        }
+        return try result.get()
+    }
+
+    func fetchPlan(token: AccessToken) async throws(UsageAPI.Error) -> Plan {
+        let result: Result<Plan, UsageAPI.Error> = lock.withLock {
+            planTokens.append(token.value)
+            return planResults.isEmpty ? .failure(.httpStatus(599)) : planResults.removeFirst()
+        }
+        return try result.get()
+    }
+}
+
+/// Records every warning offered; accepts or declines as told.
+@MainActor
+final class RecordingDelivery: WarningDelivery {
+    var accepting: Bool
+    private(set) var offered: [RateLimit] = []
+
+    init(accepting: Bool = true) {
+        self.accepting = accepting
+    }
+
+    func deliver(_ limit: RateLimit, now: Date) async -> Bool {
+        offered.append(limit)
+        return accepting
+    }
+}
+
+/// A settable clock for the service's `now`.
+final class TestClock: Sendable {
+    private let time: Mutex<Date>
+    init(_ start: Date) { time = Mutex(start) }
+    var now: Date { time.withLock { $0 } }
+    func advance(_ seconds: TimeInterval) { time.withLock { $0 += seconds } }
+}
+
+/// Hands out tokens in order, then repeats the last one.
+final class Tokens: Sendable {
+    private let values: Mutex<[String]>
+    init(_ values: [String]) { self.values = Mutex(values) }
+    func next() -> AccessToken {
+        AccessToken(values.withLock { $0.count > 1 ? $0.removeFirst() : $0[0] })
+    }
+}
+
+func reading(_ value: String) -> TokenReader {
+    { AccessToken(value) }
+}
+
+func failing(_ error: CredentialError) -> TokenReader {
+    { () async throws(CredentialError) -> AccessToken in throw error }
+}
+
+/// A service over a throwaway UserDefaults domain, removed when the rig goes away.
+@MainActor
+final class Rig {
+    let store: SnapshotStore
+    let fetcher: ScriptedFetcher
+    let delivery: RecordingDelivery
+    let clock: TestClock
+    let service: UsageService
+    /// An absolute path makes the domain a plist in the temporary directory, so test runs
+    /// never write to ~/Library/Preferences.
+    private let suiteName = FileManager.default.temporaryDirectory
+        .appendingPathComponent("limitgauge-tests-\(UUID().uuidString)").path
+
+    init(
+        usage: [Result<UsageSnapshot, UsageAPI.Error>] = [],
+        plan: [Result<Plan, UsageAPI.Error>] = [],
+        readToken: @escaping TokenReader = reading("a"),
+        seed: UsageSnapshot? = nil,
+        seedPlan: Plan? = nil,
+        delivery: RecordingDelivery = RecordingDelivery(),
+        thresholds: WarningThresholds = .default,
+        clock: TestClock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
+    ) {
+        store = SnapshotStore(defaults: UserDefaults(suiteName: suiteName)!)
+        if let seed { store.save(snapshot: seed) }
+        if let seedPlan { store.save(plan: FetchedPlan(plan: seedPlan, fetchedAt: clock.now.addingTimeInterval(-3600))) }
+        fetcher = ScriptedFetcher(usage: usage, plan: plan)
+        self.delivery = delivery
+        self.clock = clock
+        service = UsageService(readToken: readToken, fetcher: fetcher, store: store, delivery: delivery,
+                               thresholds: { thresholds }, now: { clock.now })
+    }
+
+    deinit {
+        UserDefaults().removePersistentDomain(forName: suiteName)
+        try? FileManager.default.removeItem(atPath: suiteName + ".plist")
+    }
+}

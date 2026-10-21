@@ -71,6 +71,14 @@ public enum PollScheduler {
     }
 }
 
+/// Shows a warning to the user. The app's `Notifier` is the only production conformer; it
+/// stays in the app because Notification Center needs the app bundle.
+@MainActor
+public protocol WarningDelivery: AnyObject {
+    /// True once Notification Center has accepted the request.
+    func deliver(_ limit: RateLimit, now: Date) async -> Bool
+}
+
 /// Which warnings to post for a snapshot, and the fired set to carry forward.
 public enum WarningTracker {
     public struct Outcome: Equatable, Sendable {

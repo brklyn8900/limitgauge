@@ -62,26 +62,24 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
     /// A slow Keychain read must not block the main actor: the menu stays responsive.
     @Test func readLeavesTheMainActorFree() async throws {
         let reader = standIn("/bin/sleep 0.5; printf '%s' '\(item)'")
-        let fetcher = ScriptedFetcher(usage: [])
-        let service = UsageService(fetcher: fetcher, tokenSource: reading(reader))
+        let rig = Rig(readToken: reading(reader))
         let clock = ContinuousClock()
         let start = clock.now
-        let refresh = service.refresh()
+        let refresh = rig.service.refresh(.refreshRow)
         let marker = Task { @MainActor in clock.now }
         let mainRan = await marker.value - start
-        await refresh.value
+        _ = await refresh.value
         #expect(mainRan < .milliseconds(300))
-        #expect(fetcher.usageTokens == ["sk-ant-oat01-test"])
+        #expect(rig.fetcher.usageTokens == ["sk-ant-oat01-test"])
     }
 }
 
 @MainActor
 @Suite struct CredentialProblemTests {
     private func problem(after reader: ClaudeCodeCredentials) async -> (UsageProblem?, [String]) {
-        let fetcher = ScriptedFetcher(usage: [])
-        let service = UsageService(fetcher: fetcher, tokenSource: reading(reader))
-        await service.refresh().value
-        return (service.problem, fetcher.usageTokens)
+        let rig = Rig(readToken: reading(reader))
+        _ = await rig.service.refresh(.refreshRow).value
+        return (rig.service.problem, rig.fetcher.usageTokens)
     }
 
     /// Today a malformed item, exit 51 and a tool that cannot launch all say "Sign in with
@@ -125,12 +123,11 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
     /// rejected token.
     @Test func failedRereadReportsItsOwnProblem() async {
         let reads = Mutex(0)
-        let fetcher = ScriptedFetcher(usage: [.failure(.unauthorized)])
-        let service = UsageService(fetcher: fetcher, tokenSource: { () async throws(CredentialError) -> AccessToken in
+        let rig = Rig(usage: [.failure(.unauthorized)], readToken: { () async throws(CredentialError) -> AccessToken in
             if reads.withLock({ $0 += 1; return $0 }) == 1 { return AccessToken("old") }
             throw .refused(exitCode: 36)
         })
-        await service.refresh().value
-        #expect(service.problem == .keychainDenied)
+        _ = await rig.service.refresh(.refreshRow).value
+        #expect(rig.service.problem == .keychainDenied)
     }
 }

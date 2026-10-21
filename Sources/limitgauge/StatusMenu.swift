@@ -53,7 +53,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         isOpen = true
         rebuild()
         // Cached rows are already on screen; a stale snapshot refreshes behind them (ADR-0002).
-        service.refreshIfStale()
+        service.refresh(.menuOpen)
     }
 
     func menuDidClose(_ menu: NSMenu) {
@@ -82,7 +82,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             updatedItem.title = "No data yet"
         }
         refreshItem.view = MenuRows.action("Refresh", enabled: !service.isRefreshing) { [weak self] in
-            self?.service.refresh()
+            self?.service.refresh(.refreshRow)
         }
     }
 

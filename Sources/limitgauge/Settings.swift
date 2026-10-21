@@ -27,7 +27,6 @@ enum Settings {
     private static let hideWarningDotKey = "hideWarningDot"
     private static let notificationsDisabledKey = "notificationsDisabled"
     private static let thresholdsKey = "thresholds"
-    private static let firedWarningsKey = "firedWarnings"
 
     static var icon: Icon {
         get { UserDefaults.standard.string(forKey: iconKey).flatMap(Icon.init(rawValue:)) ?? .hourglassCircle }
@@ -51,15 +50,5 @@ enum Settings {
             return t
         }
         set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: thresholdsKey) }
-    }
-
-    /// Warnings already posted, so a relaunch does not repeat them within the same window.
-    static var firedWarnings: Set<WarningKey> {
-        get {
-            guard let data = UserDefaults.standard.data(forKey: firedWarningsKey),
-                  let keys = try? JSONDecoder().decode(Set<WarningKey>.self, from: data) else { return [] }
-            return keys
-        }
-        set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: firedWarningsKey) }
     }
 }
