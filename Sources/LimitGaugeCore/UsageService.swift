@@ -54,9 +54,11 @@ public final class UsageService {
 
     /// When the next background poll is due, from the pure scheduler (ADR-0002). Derived on
     /// every read, so a refresh or a threshold change shows without anyone recomputing it.
-    /// Nil only before the first attempt on a fresh install.
+    /// Nil before the first attempt on a fresh install, and while a refresh runs: the due time
+    /// is stale until it ends, and its end re-arms the timer.
     public var nextPoll: Date? {
-        PollScheduler.nextPoll(snapshot: snapshot, failures: failures, thresholds: thresholds())
+        guard inFlight == nil else { return nil }
+        return PollScheduler.nextPoll(snapshot: snapshot, failures: failures, thresholds: thresholds())
     }
 
     /// Called on the main actor when a refresh starts, when it ends or is skipped, and after a

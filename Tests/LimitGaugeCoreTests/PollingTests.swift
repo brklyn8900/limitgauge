@@ -54,6 +54,21 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(rig.service.nextPoll == t0.addingTimeInterval(90 * 60))
     }
 
+    /// While a refresh runs there is nothing to poll for, and the stale due time must not
+    /// re-arm the timer in the past: seen in the running app on 2026-10-21, where the start
+    /// of a poll's refresh fired the timer a second time.
+    @Test func noPollIsDueWhileARefreshRuns() async throws {
+        let rig = Rig(usage: [.success(snapshot(at: t0))], readToken: { () async throws(CredentialError) -> AccessToken in
+            try? await Task.sleep(for: .milliseconds(100))
+            return AccessToken("a")
+        }, seed: snapshot(at: t0.addingTimeInterval(-2 * 3600)))
+        var dueAtStart: [Date?] = []
+        rig.service.onChange = { if rig.service.isRefreshing { dueAtStart.append(rig.service.nextPoll) } }
+        _ = await rig.service.refresh(.poll).value
+        #expect(dueAtStart == [nil])
+        #expect(rig.service.nextPoll == t0.addingTimeInterval(3600))
+    }
+
     /// The two-minute cache measures from the last attempt, so a failing endpoint is not
     /// asked again on every menu open.
     @Test func menuOpenWithinTwoMinutesOfAFailureIsSkipped() async {
