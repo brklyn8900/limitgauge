@@ -31,7 +31,7 @@ app: build $(ICON)
 	@if [ -n "$(SIGN_IDENTITY)" ]; then \
 	  codesign --force --options runtime --sign "$(SIGN_IDENTITY)" $(APPDIR); \
 	else \
-	  echo "warning: no Apple Development identity found; signing ad hoc, the Keychain grant will reset on every rebuild" >&2; \
+	  echo "warning: no Apple Development identity found; signing ad hoc, notification permission and launch at login may reset on every rebuild" >&2; \
 	  codesign --force --sign - $(APPDIR); \
 	fi
 	@codesign -dv $(APPDIR) 2>&1 | grep -E '^(Authority|TeamIdentifier)' || true
