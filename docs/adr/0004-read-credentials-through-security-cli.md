@@ -28,8 +28,11 @@ after a refresh. Verified on this machine: exit 0 in 25 ms, no prompt.
    "Claude Code-credentials" -w` and parses its stdout. The path is absolute; no PATH lookup.
 2. Exit codes map onto the existing errors: 44 is `notFound`; 36 (interaction not allowed)
    and 128 (user cancelled) are `accessDenied`; anything else carries the exit code.
-3. A read that does not finish within five seconds is terminated and reported as
-   `accessDenied`, so a stuck Keychain dialog cannot hang the service.
+3. The read is asynchronous and runs off the main actor. Its five-second deadline runs on its
+   own clock, independent of the tool's output, so it fires even while the tool is blocked.
+   At the deadline the tool is sent SIGTERM, then SIGKILL a second later if it is still
+   running, and the read is reported as `timedOut`, shown like a refusal. A stuck Keychain
+   dialog cannot hang the service or the menu.
 4. Everything else in ADR-0001 stands: read-only, no refresh, one re-read on 401.
 5. The `claude setup-token` fallback from the proposal is not built. Its only purpose was
    escaping the dialog, and this removes the dialog.
