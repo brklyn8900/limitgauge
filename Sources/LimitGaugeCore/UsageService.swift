@@ -108,9 +108,12 @@ public final class UsageService {
             return
         }
 
+        // The token that succeeded; the plan goes out with it, never with a rejected one.
+        let working: String
         do {
             snapshot = try await fetcher.fetchUsage(token: token.accessToken)
             problem = nil
+            working = token.accessToken
         } catch .unauthorized {
             // Claude Code may have rotated the token since the read. One re-read, one retry.
             guard let fresh = try? tokenSource(), fresh.accessToken != token.accessToken else {
@@ -120,6 +123,7 @@ public final class UsageService {
             do {
                 snapshot = try await fetcher.fetchUsage(token: fresh.accessToken)
                 problem = nil
+                working = fresh.accessToken
             } catch {
                 if case .unauthorized = error {
                     problem = .tokenRejected
@@ -133,7 +137,7 @@ public final class UsageService {
             return
         }
 
-        await refreshPlanIfStale(token: token.accessToken)
+        await refreshPlanIfStale(token: working)
     }
 
     private func refreshPlanIfStale(token: String) async {

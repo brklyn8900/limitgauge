@@ -87,6 +87,19 @@ private func token(_ s: String) -> ClaudeCodeCredentials.Token {
         #expect(service.snapshot != nil)
     }
 
+    /// The plan must go out with the token that worked, not the one the endpoint rejected.
+    @Test func planIsFetchedWithTheRereadToken() async {
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let fetcher = ScriptedFetcher(usage: [.failure(.unauthorized), .success(snapshot(at: t0))],
+                                      plan: [.success(Plan(rateLimitTier: "default_claude_max_5x"))])
+        let tokens = Tokens(["old", "new"])
+        let service = UsageService(fetcher: fetcher, tokenSource: { tokens.next() }, now: { t0 })
+        await service.refresh().value
+        #expect(fetcher.usageTokens == ["old", "new"])
+        #expect(fetcher.planTokens == ["new"])
+        #expect(service.plan?.displayName == "Max 5x")
+    }
+
     @Test func unauthorizedWithSameTokenIsRejected() async {
         let t0 = Date(timeIntervalSince1970: 1_000_000)
         let fetcher = ScriptedFetcher(usage: [.failure(.unauthorized), .success(snapshot(at: t0))])
