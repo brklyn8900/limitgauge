@@ -30,10 +30,28 @@ public struct AccessToken: Equatable, Sendable, CustomStringConvertible, CustomD
 /// The read goes through `/usr/bin/security`, the same tool Claude Code uses to store and
 /// read the item, so the item's access list already trusts it and no consent dialog is
 /// raised (ADR-0004).
-public enum ClaudeCodeCredentials {
+public struct ClaudeCodeCredentials: Sendable {
     public static let service = "Claude Code-credentials"
-    static let securityTool = URL(fileURLWithPath: "/usr/bin/security")
-    static let readTimeout: TimeInterval = 5
+    static let security = ToolRun.Command(
+        tool: URL(fileURLWithPath: "/usr/bin/security"),
+        arguments: ["find-generic-password", "-s", service, "-w"]
+    )
+    static let readTimeout: Duration = .seconds(5)
+
+    let command: ToolRun.Command
+    let timeout: Duration
+
+    /// The production reader: the absolute `/usr/bin/security` and five seconds. Neither can
+    /// be changed from outside Core.
+    public init() {
+        self.init(command: Self.security, timeout: Self.readTimeout)
+    }
+
+    /// Tests: a stand-in tool and a short deadline.
+    init(command: ToolRun.Command, timeout: Duration) {
+        self.command = command
+        self.timeout = timeout
+    }
 
     public enum Error: Swift.Error, Equatable {
         /// No item named `service`. Claude Code has never signed in on this machine.
@@ -44,31 +62,23 @@ public enum ClaudeCodeCredentials {
         /// The security tool failed with an exit code not covered above.
         case security(exitCode: Int32)
         case malformed
+        /// No exit within the deadline; the tool was terminated (ADR-0004 point 3).
+        case timedOut
     }
 
-    public static func read() throws(Error) -> AccessToken {
-        let process = Process()
-        process.executableURL = securityTool
-        process.arguments = ["find-generic-password", "-s", service, "-w"]
-        let stdout = Pipe()
-        process.standardOutput = stdout
-        process.standardError = FileHandle.nullDevice
-
-        let finished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in finished.signal() }
+    /// Suspends, never blocks, for the whole read, and is bounded by `timeout` whatever the
+    /// tool does (ADR-0004 point 3).
+    public func read() async throws(Error) -> AccessToken {
+        let exit: ToolRun.Exit
         do {
-            try process.run()
-        } catch {
+            exit = try await ToolRun.run(command, timeout: timeout)
+        } catch .launchFailed {
             throw .security(exitCode: -1)
+        } catch {
+            throw .timedOut
         }
-        // Drain stdout before waiting so a large write cannot fill the pipe and block the tool.
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        if finished.wait(timeout: .now() + readTimeout) == .timedOut {
-            process.terminate()
-            throw .accessDenied
-        }
-        if let failure = error(forExitCode: process.terminationStatus) { throw failure }
-        return try parse(data)
+        if let failure = Self.error(forExitCode: exit.status) { throw failure }
+        return try Self.parse(exit.stdout)
     }
 
     /// Exit codes of `security` as Claude Code relies on them: 44 for a missing item, 36 when

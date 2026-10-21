@@ -48,13 +48,13 @@ public final class UsageService {
     public var onChange: (() -> Void)?
 
     private let fetcher: any UsageFetching
-    private let tokenSource: @Sendable () throws -> AccessToken
+    private let tokenSource: @Sendable () async throws -> AccessToken
     private let now: @Sendable () -> Date
     private var inFlight: Task<Void, Never>?
 
     public init(
         fetcher: any UsageFetching,
-        tokenSource: @escaping @Sendable () throws -> AccessToken = { try ClaudeCodeCredentials.read() },
+        tokenSource: @escaping @Sendable () async throws -> AccessToken = { try await ClaudeCodeCredentials().read() },
         snapshot: UsageSnapshot? = nil,
         plan: Plan? = nil,
         planFetchedAt: Date? = nil,
@@ -102,7 +102,7 @@ public final class UsageService {
 
         let token: AccessToken
         do {
-            token = try tokenSource()
+            token = try await tokenSource()
         } catch {
             problem = Self.problem(for: error)
             return
@@ -116,7 +116,7 @@ public final class UsageService {
             working = token
         } catch .unauthorized {
             // Claude Code may have rotated the token since the read. One re-read, one retry.
-            guard let fresh = try? tokenSource(), fresh != token else {
+            guard let fresh = try? await tokenSource(), fresh != token else {
                 problem = .tokenRejected
                 return
             }
@@ -152,7 +152,7 @@ public final class UsageService {
     private static func problem(for error: any Error) -> UsageProblem {
         switch error {
         case ClaudeCodeCredentials.Error.notFound: return .noCredentials
-        case ClaudeCodeCredentials.Error.accessDenied: return .keychainDenied
+        case ClaudeCodeCredentials.Error.accessDenied, ClaudeCodeCredentials.Error.timedOut: return .keychainDenied
         case is ClaudeCodeCredentials.Error: return .noCredentials
         case UsageAPI.Error.unauthorized: return .tokenRejected
         case UsageAPI.Error.httpStatus(let status): return .server(status)
