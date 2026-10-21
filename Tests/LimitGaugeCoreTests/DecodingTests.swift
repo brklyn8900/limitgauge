@@ -96,6 +96,25 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
         }
     }
 
+    /// A fractional percent in one element drops that element, not the fetch (ADR-0001 point 4).
+    @Test func oneMalformedLimitIsDropped() throws {
+        let data = Data("""
+        {"limits": [{"kind": "session", "percent": 12.5, "resets_at": "2030-01-07T05:00:00+00:00"},
+                    {"kind": "weekly_all", "percent": 50, "resets_at": "2030-01-10T22:00:00+00:00"},
+                    {"kind": "weekly_scoped", "percent": 75, "resets_at": "2030-01-10T22:00:00+00:00",
+                     "scope": {"model": {"display_name": 7}}}]}
+        """.utf8)
+        let snap = try UsageDecoding.snapshot(from: data)
+        #expect(snap.limits.map(\.kind) == [.weeklyAll])
+    }
+
+    @Test func limitsThatIsNotAnArrayIsMissing() {
+        let data = Data(#"{"limits": {"kind": "session"}}"#.utf8)
+        #expect(throws: UsageDecoding.Error.missingLimits) {
+            try UsageDecoding.snapshot(from: data)
+        }
+    }
+
     @Test func unknownLimitKindIsKept() throws {
         let data = Data("""
         {"limits": [{"kind": "monthly_thing", "percent": 5, "resets_at": "2026-11-01T00:00:00+00:00"}]}

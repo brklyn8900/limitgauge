@@ -174,7 +174,7 @@ public enum UsageDecoding {
         } catch {
             throw Error.malformedJSON(String(describing: error))
         }
-        guard let rawLimits = raw.limits?.value, !rawLimits.isEmpty else { throw Error.missingLimits }
+        guard let rawLimits = raw.limits?.value?.compactMap(\.value), !rawLimits.isEmpty else { throw Error.missingLimits }
 
         let limits = rawLimits.compactMap { l -> RateLimit? in
             guard let kind = l.kind, let percent = l.percent,
@@ -237,7 +237,9 @@ struct Lenient<T: Decodable>: Decodable {
 
 // Wire shapes. Field names mirror the endpoint, hence the snake_case.
 struct UsageResponse: Decodable {
-    var limits: Lenient<[RawLimit]>?
+    /// Outer: `limits` that is not an array counts as missing. Inner: one unreadable element
+    /// (a fractional percent, a reshaped scope) drops only itself.
+    var limits: Lenient<[Lenient<RawLimit>]>?
     var iguana_necktie: Lenient<RawDollarWindow>?
     var spend: Lenient<RawSpend>?
     var extra_usage: Lenient<RawExtraUsage>?
