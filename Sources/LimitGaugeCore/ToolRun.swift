@@ -32,7 +32,6 @@ struct ToolRun {
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
-        let child = Child(process)
         let once = ResumeOnce<Result<Exit, Failure>>()
 
         let result = await withCheckedContinuation { continuation in
@@ -41,7 +40,11 @@ struct ToolRun {
             exitAndEOF.enter()
             exitAndEOF.enter()
             let output = Mutex(Data())
-            process.terminationHandler = { _ in exitAndEOF.leave() }
+            let status = ExitStatus()
+            process.terminationHandler = { process in
+                status.set(process.terminationStatus)
+                exitAndEOF.leave()
+            }
             do {
                 try process.run()
             } catch {
@@ -50,6 +53,7 @@ struct ToolRun {
                 once.resume(.failure(.launchFailed))
                 return
             }
+            let pid = process.processIdentifier
             // Drain on a dispatch thread, not the cooperative pool: the read blocks until EOF,
             // and a full pipe must not stall the tool.
             DispatchQueue.global().async {
@@ -62,28 +66,22 @@ struct ToolRun {
             let deadline = Task {
                 try? await Task.sleep(for: timeout)
                 guard !Task.isCancelled, once.resume(.failure(.timedOut)) else { return }
-                child.terminate()
+                kill(pid, SIGTERM)
                 try? await Task.sleep(for: .seconds(1))
-                child.killIfRunning()
+                if status.code == nil { kill(pid, SIGKILL) }
             }
             exitAndEOF.notify(queue: .global()) {
                 deadline.cancel()
-                once.resume(.success(Exit(status: child.status, stdout: SecretOutput(data: output.withLock { $0 }))))
+                once.resume(.success(Exit(status: status.code!, stdout: SecretOutput(data: output.withLock { $0 }))))
             }
         }
         return try result.get()
     }
 
-    /// `Process` is not Sendable. The deadline needs it from another thread only to signal it,
-    /// which is safe once `run()` has returned.
-    private final class Child: @unchecked Sendable {
-        private let process: Process
-        init(_ process: Process) { self.process = process }
-        var status: Int32 { process.terminationStatus }
-        func terminate() { process.terminate() }
-        func killIfRunning() {
-            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-        }
+    private final class ExitStatus: Sendable {
+        private let state = Mutex<Int32?>(nil)
+        var code: Int32? { state.withLock { $0 } }
+        func set(_ code: Int32) { state.withLock { $0 = code } }
     }
 }
 
