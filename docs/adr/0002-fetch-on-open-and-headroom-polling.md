@@ -39,8 +39,9 @@ idle and too seldom when a five-hour window is being spent quickly.
 4. Any fetch attempt restarts the clock, so a user who opens the menu often pays for no extra
    polls.
 5. No timer fires while the Mac sleeps. On wake the timer is re-armed for the same time, so
-   an overdue poll runs at once. Its fetch waits for the network to come back, up to the
-   30-second limit on every fetch, instead of failing as offline.
+   an overdue poll runs at once. Its fetch waits for the network to come back instead of
+   failing as offline. Every fetch waits that way, up to its 30-second limit, so offline a
+   menu open or Refresh shows "Updating…" for up to 30 seconds before the error.
 6. The snapshot and its timestamp persist in `UserDefaults`, so the menu is populated at
    launch.
 
