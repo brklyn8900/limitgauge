@@ -38,6 +38,30 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         #expect(!alive)
     }
 
+    /// A tool that survives SIGTERM is killed a second later. The stand-in logs each TERM and
+    /// keeps running, so once it is gone, only SIGKILL can have ended it.
+    @Test func toolThatTrapsTermIsKilled() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("limitgauge-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pidFile = dir.appendingPathComponent("pid")
+        let termFile = dir.appendingPathComponent("term")
+        let reader = standIn("trap 'echo term >> \"\(termFile.path)\"' TERM; echo $$ > '\(pidFile.path)'; while :; do /bin/sleep 0.1; done",
+                             timeout: .milliseconds(300))
+
+        await #expect(throws: CredentialError.timedOut) { try await reader.read() }
+
+        let pid = try #require(pid_t(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
+        defer { kill(pid, SIGKILL) }
+        var alive = true
+        for _ in 0..<50 where alive {
+            try await Task.sleep(for: .milliseconds(100))
+            alive = kill(pid, 0) == 0
+        }
+        #expect(!alive)
+        #expect(try String(contentsOf: termFile, encoding: .utf8).contains("term"))
+    }
+
     @Test func goodItemIsRead() async throws {
         let token = try await standIn("printf '%s' '\(item)'").read()
         #expect(token.value == "sk-ant-oat01-test")
