@@ -63,9 +63,7 @@ enum PollScheduler {
     static let farInterval: TimeInterval = 60 * 60
     static let nearInterval: TimeInterval = 30 * 60
     static let closeInterval: TimeInterval = 10 * 60
-    /// How long after a past-threshold limit's reset to look again, so the new window's
-    /// numbers are in.
-    static let afterReset: TimeInterval = 60
+    static let delayAfterPastLimitReset: TimeInterval = 60
 
     static func interval(for headroom: Int) -> TimeInterval {
         if headroom > 40 { return farInterval }
@@ -91,7 +89,7 @@ enum PollScheduler {
             return nil
         }.min()
         let pace = at.addingTimeInterval(least.map(interval(for:)) ?? farInterval)
-        let rearm = states.filter { $0.1 == .past }.map { $0.0.resetsAt.addingTimeInterval(afterReset) }.min()
+        let rearm = states.filter { $0.1 == .past }.map { $0.0.resetsAt.addingTimeInterval(delayAfterPastLimitReset) }.min()
         return min(pace, rearm ?? pace)
     }
 
@@ -125,8 +123,7 @@ public protocol WarningDelivery: AnyObject, Sendable {
 enum WarningTracker {
     struct Outcome: Equatable, Sendable {
         var due: [RateLimit]
-        /// `fired` without the keys of windows that have passed, so the next window can fire.
-        var fired: Set<WarningKey>
+        var firedInCurrentWindows: Set<WarningKey>
     }
 
     /// A limit whose window has reset since the fetch is unknown and never due (ADR-0005
@@ -142,6 +139,6 @@ enum WarningTracker {
         let due = snapshot.limits.filter {
             thresholds.state(of: $0, at: now) == .past && seen.insert(WarningKey($0)).inserted
         }
-        return Outcome(due: due, fired: fired)
+        return Outcome(due: due, firedInCurrentWindows: fired)
     }
 }

@@ -37,11 +37,11 @@ final class GatedDelivery: WarningDelivery {
         #expect(rig.store.loadFiredWarnings().isEmpty)
 
         delivery.accepting = true
-        await rig.service.settingsChanged().value
+        await rig.service.reevaluateWarnings().value
         #expect(delivery.offered.count == 2)
         #expect(rig.store.loadFiredWarnings().count == 1)
 
-        await rig.service.settingsChanged().value
+        await rig.service.reevaluateWarnings().value
         #expect(delivery.offered.count == 2)
     }
 
@@ -81,7 +81,7 @@ final class GatedDelivery: WarningDelivery {
         let rig = Rig(usage: [.success(snapshot(percent: 90))], delivery: delivery)
         let refresh = rig.service.refresh(.refreshRow)
         while delivery.offered.isEmpty { await Task.yield() }
-        let change = rig.service.settingsChanged()
+        let change = rig.service.reevaluateWarnings()
         delivery.release(accepting: true)
         _ = await refresh.value
         await change.value
@@ -98,7 +98,7 @@ final class GatedDelivery: WarningDelivery {
                                   fetchedAt: t0.addingTimeInterval(-3 * 3600))
         let delivery = RecordingDelivery()
         let rig = Rig(seed: stale, delivery: delivery)
-        await rig.service.settingsChanged().value
+        await rig.service.reevaluateWarnings().value
         #expect(delivery.offered.isEmpty)
     }
 }

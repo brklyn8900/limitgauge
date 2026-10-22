@@ -31,17 +31,16 @@ struct ToolRun {
 
         let result = await withCheckedContinuation { continuation in
             once.install(continuation)
-            // A normal run ends with two events: stdout reaches EOF, and the process exits.
-            let finished = DispatchGroup()
-            finished.enter()
-            finished.enter()
+            let exitAndEOF = DispatchGroup()
+            exitAndEOF.enter()
+            exitAndEOF.enter()
             let output = Mutex(Data())
-            process.terminationHandler = { _ in finished.leave() }
+            process.terminationHandler = { _ in exitAndEOF.leave() }
             do {
                 try process.run()
             } catch {
-                finished.leave()
-                finished.leave()
+                exitAndEOF.leave()
+                exitAndEOF.leave()
                 once.resume(.failure(.launchFailed))
                 return
             }
@@ -50,7 +49,7 @@ struct ToolRun {
             DispatchQueue.global().async {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 output.withLock { $0 = data }
-                finished.leave()
+                exitAndEOF.leave()
             }
             // The deadline runs on its own clock, independent of the blocking read, so it fires
             // even while the tool is stuck (ADR-0004 point 3).
@@ -61,7 +60,7 @@ struct ToolRun {
                 try? await Task.sleep(for: .seconds(1))
                 child.killIfRunning()
             }
-            finished.notify(queue: .global()) {
+            exitAndEOF.notify(queue: .global()) {
                 deadline.cancel()
                 once.resume(.success(Exit(status: child.status, stdout: output.withLock { $0 })))
             }

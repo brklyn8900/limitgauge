@@ -122,10 +122,10 @@ public final class UsageService {
         return task
     }
 
-    /// Thresholds changed. A raised threshold re-arms its warning, a lowered one may make a
-    /// warning due, and the pace follows. Tests await `.value`.
+    /// Thresholds or notification permission changed. A raised threshold re-arms its warning,
+    /// a lowered one may make a warning due, and the pace follows. Tests await `.value`.
     @discardableResult
-    public func settingsChanged() -> Task<Void, Never> {
+    public func reevaluateWarnings() -> Task<Void, Never> {
         if let snapshot {
             let past = snapshot.limits.filter { thresholds().state(of: $0, at: now()) == .past }.map { WarningKey($0) }
             setFired(fired.intersection(past))
@@ -250,7 +250,7 @@ public final class UsageService {
     private func deliverDueWarnings() async {
         guard let snapshot else { return }
         let outcome = WarningTracker.evaluate(snapshot: snapshot, thresholds: thresholds(), fired: fired, at: now())
-        setFired(outcome.fired)
+        setFired(outcome.firedInCurrentWindows)
         let due = outcome.due.filter { !delivering.contains(WarningKey($0)) }
         let keys = Set(due.map { WarningKey($0) })
         delivering.formUnion(keys)

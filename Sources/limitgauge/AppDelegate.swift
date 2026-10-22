@@ -23,20 +23,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow = SettingsWindow(
             notifier: notifier,
             scopedLimitName: { [weak self] in self?.service.snapshot?.limit(.weeklyScoped)?.scopeName },
-            onChange: { [weak self] in self?.service.settingsChanged() }
+            onChange: { [weak self] in self?.service.reevaluateWarnings() }
         )
         statusMenu = StatusMenu(service: service) { [weak self] in self?.settingsWindow.show() }
         service.onChange = { [weak self] in self?.serviceChanged() }
 
         service.refresh(.launch)
         Task {
-            // A warning that waited for permission goes out once it is granted.
-            if await notifier.requestAuthorizationIfEnabled() { service.settingsChanged() }
+            if await notifier.requestAuthorizationIfEnabled() { service.reevaluateWarnings() }
         }
     }
 
     private func serviceChanged() {
-        statusMenu.update()
+        statusMenu.updateIconAndOpenRows()
         poller.schedule(at: service.nextPoll)
     }
 }

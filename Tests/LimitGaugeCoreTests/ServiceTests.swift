@@ -51,7 +51,7 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
 
     @Test func unauthorizedRetriesOnceWithRereadToken() async {
         let tokens = Tokens(["old", "new"])
-        let rig = Rig(usage: [.failure(.unauthorized), .success(snapshot(at: t0))], readToken: { tokens.next() })
+        let rig = Rig(usage: [.failure(.unauthorized), .success(snapshot(at: t0))], readToken: { tokens.nextOrLast() })
         #expect(await rig.service.refresh(.refreshRow).value == .fetched)
         #expect(rig.fetcher.usageTokens == ["old", "new"])
         #expect(rig.service.problem == nil)
@@ -60,7 +60,7 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
     @Test func planIsFetchedWithTheRereadToken() async {
         let tokens = Tokens(["old", "new"])
         let rig = Rig(usage: [.failure(.unauthorized), .success(snapshot(at: t0))],
-                      plan: [.success(Plan(rateLimitTier: "default_claude_max_5x"))], readToken: { tokens.next() })
+                      plan: [.success(Plan(rateLimitTier: "default_claude_max_5x"))], readToken: { tokens.nextOrLast() })
         _ = await rig.service.refresh(.refreshRow).value
         #expect(rig.fetcher.usageTokens == ["old", "new"])
         #expect(rig.fetcher.planTokens == ["new"])
@@ -76,7 +76,7 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
 
     @Test func unauthorizedTwiceIsRejected() async {
         let tokens = Tokens(["old", "new"])
-        let rig = Rig(usage: [.failure(.unauthorized), .failure(.unauthorized)], readToken: { tokens.next() })
+        let rig = Rig(usage: [.failure(.unauthorized), .failure(.unauthorized)], readToken: { tokens.nextOrLast() })
         #expect(await rig.service.refresh(.refreshRow).value == .failed(.tokenRejected))
         #expect(rig.fetcher.usageTokens == ["old", "new"])
     }

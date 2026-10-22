@@ -107,12 +107,12 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         let s = snap(session: 85, week: 20, fable: 10)
         let first = WarningTracker.evaluate(snapshot: s, thresholds: t, fired: [], at: now)
         #expect(first.due.map(\.kind) == [.session])
-        #expect(first.fired.isEmpty)
+        #expect(first.firedInCurrentWindows.isEmpty)
 
         let delivered: Set<WarningKey> = [WarningKey(s.limits[0])]
         let again = WarningTracker.evaluate(snapshot: snap(session: 95, week: 20, fable: 10), thresholds: t, fired: delivered, at: now)
         #expect(again.due.isEmpty)
-        #expect(again.fired == delivered)
+        #expect(again.firedInCurrentWindows == delivered)
     }
 
     @Test func newWindowRearms() {
@@ -124,13 +124,13 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         next.limits[0].percent = 82
         let second = WarningTracker.evaluate(snapshot: next, thresholds: t, fired: delivered, at: now)
         #expect(second.due.map(\.kind) == [.session])
-        #expect(second.fired.isEmpty)
+        #expect(second.firedInCurrentWindows.isEmpty)
     }
 
     @Test func belowThresholdFiresNothing() {
         let out = WarningTracker.evaluate(snapshot: snap(session: 79, week: 84, fable: 79), thresholds: t, fired: [], at: now)
         #expect(out.due.isEmpty)
-        #expect(out.fired.isEmpty)
+        #expect(out.firedInCurrentWindows.isEmpty)
     }
 
     @Test func severalAtOnce() {

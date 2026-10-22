@@ -253,9 +253,7 @@ struct Lenient<T: Decodable>: Decodable {
 }
 
 struct UsageResponse: Decodable {
-    /// Outer: `limits` that is not an array counts as missing. Inner: one unreadable element
-    /// (a fractional percent, a reshaped scope) drops only itself.
-    var limits: Lenient<[RawLimitElement]>?
+    var limits: Lenient<[LenientRawLimit]>?
     var iguana_necktie: Lenient<RawDollarWindow>?
     var spend: Lenient<RawSpend>?
     var extra_usage: Lenient<RawExtraUsage>?
@@ -272,7 +270,7 @@ struct RawLimit: Decodable {
 
 /// One `limits[]` element, read leniently. Its kind is read on its own, so an element that
 /// fails to decode still says which limit it was.
-struct RawLimitElement: Decodable {
+struct LenientRawLimit: Decodable {
     private enum Keys: String, CodingKey { case kind }
     let limit: RawLimit?
     let kind: String?

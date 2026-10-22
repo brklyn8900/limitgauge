@@ -9,8 +9,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let warningDot = WarningDotView()
     private let openSettings: () -> Void
     private var isOpen = false
-    /// Redraws the icon when a past limit resets, which turns the dot off without a fetch.
-    private var dotTimer: Timer?
+    private var redrawAtPastReset: Timer?
     private var wakeObserver: NSObjectProtocol?
 
     // The footer is built once and kept. Removing and re-adding standard items while the
@@ -44,12 +43,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.update() }
+            MainActor.assumeIsolated { self?.updateIconAndOpenRows() }
         }
-        update()
+        updateIconAndOpenRows()
     }
 
-    func update() {
+    func updateIconAndOpenRows() {
         updateIcon()
         if isOpen { rebuild() }
     }
@@ -176,15 +175,14 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         let reset = service.snapshot.flatMap { thresholds.earliestPastReset(in: $0, at: now) }
         warningDot.isHidden = !(reset != nil && Settings.showsWarningDot)
 
-        dotTimer?.invalidate()
-        dotTimer = nil
+        redrawAtPastReset?.invalidate()
+        redrawAtPastReset = nil
         guard let reset else { return }
-        // update(), not updateIcon(): an open menu must stop showing the limit red with the dot.
         let timer = Timer(fire: reset, interval: 0, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.update() }
+            MainActor.assumeIsolated { self?.updateIconAndOpenRows() }
         }
         RunLoop.main.add(timer, forMode: .common)
-        dotTimer = timer
+        redrawAtPastReset = timer
     }
 }
 

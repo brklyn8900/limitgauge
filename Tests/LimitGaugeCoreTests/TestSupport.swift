@@ -55,11 +55,10 @@ final class TestClock: Sendable {
     func advance(_ seconds: TimeInterval) { time.withLock { $0 += seconds } }
 }
 
-/// Hands out tokens in order, then repeats the last one.
 final class Tokens: Sendable {
     private let values: Mutex<[String]>
     init(_ values: [String]) { self.values = Mutex(values) }
-    func next() -> AccessToken {
+    func nextOrLast() -> AccessToken {
         AccessToken(values.withLock { $0.count > 1 ? $0.removeFirst() : $0[0] })
     }
 }
