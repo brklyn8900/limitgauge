@@ -69,10 +69,13 @@ public struct ClaudeCodeCredentials: Sendable {
         let exit: ToolRun.Exit
         do {
             exit = try await ToolRun.run(command, timeout: timeout)
-        } catch .launchFailed {
-            throw .launchFailed
         } catch {
-            throw .timedOut
+            // A switch, not a catch-all: a new failure must not build until it has its own
+            // error, rather than being reported as a timeout.
+            switch error {
+            case .launchFailed: throw .launchFailed
+            case .timedOut: throw .timedOut
+            }
         }
         if let failure = Self.error(forExitCode: exit.status) { throw failure }
         return try Self.parse(exit.stdout)
