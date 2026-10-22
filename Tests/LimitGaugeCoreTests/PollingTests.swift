@@ -134,4 +134,35 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(await rig.service.refresh(.poll).value == .fetched)
         #expect(reads.withLock { $0 } == 3)
     }
+
+    /// The re-read after a 401 counts like any read: refused, it stops the next poll's read.
+    @Test func refusedRereadAfterA401StopsPollReads() async {
+        let clock = TestClock(t0)
+        let reads = Mutex(0)
+        let rig = Rig(usage: [.failure(.unauthorized)], readToken: { () async throws(CredentialError) -> AccessToken in
+            if reads.withLock({ $0 += 1; return $0 }) == 1 { return AccessToken("old") }
+            throw .refused(exitCode: 51)
+        }, clock: clock)
+        #expect(await rig.service.refresh(.refreshRow).value == .failed(.keychainDenied))
+        clock.advance(3600)
+        #expect(await rig.service.refresh(.poll).value == .failed(.keychainDenied))
+        #expect(reads.withLock { $0 } == 2)
+    }
+
+    /// A read that fails for any reason but a refusal or a timeout lets polls read again, so
+    /// only a read that can bring a dialog back is held for the user.
+    @Test(arguments: [CredentialError.notFound, .failed(exitCode: 7), .launchFailed, .malformed])
+    func otherReadFailuresLetPollsReadAgain(error: CredentialError) async {
+        let clock = TestClock(t0)
+        let reads = Mutex(0)
+        let rig = Rig(readToken: { () async throws(CredentialError) -> AccessToken in
+            if reads.withLock({ $0 += 1; return $0 }) == 1 { throw .refused(exitCode: 51) }
+            throw error
+        }, clock: clock)
+        _ = await rig.service.refresh(.poll).value
+        #expect(await rig.service.refresh(.refreshRow).value == .failed(RefreshFailure(error).problem))
+        clock.advance(3600)
+        _ = await rig.service.refresh(.poll).value
+        #expect(reads.withLock { $0 } == 3)
+    }
 }
