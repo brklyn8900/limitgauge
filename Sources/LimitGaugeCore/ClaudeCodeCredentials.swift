@@ -47,6 +47,8 @@ public struct ClaudeCodeCredentials: Sendable {
         arguments: ["find-generic-password", "-s", service, "-w"]
     )
     static let readTimeout: Duration = .seconds(5)
+    /// The deadline as the message and the log state it, e.g. "5 s".
+    static var readTimeoutText: String { "\(readTimeout.components.seconds) s" }
 
     let command: ToolRun.Command
     let timeout: Duration

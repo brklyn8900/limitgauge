@@ -121,6 +121,7 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
     @Test func logLinesCarryTheExitCode() {
         #expect(RefreshFailure(CredentialError.refused(exitCode: 51)).logDescription == "security: refused (exit 51)")
         #expect(RefreshFailure(CredentialError.failed(exitCode: 7)).logDescription == "security: exit 7")
+        #expect(RefreshFailure(CredentialError.timedOut).logDescription == "security: no answer in 5 s, terminated")
         #expect(RefreshFailure(UsageAPI.Error.decoding(.malformedJSON("{\"email\": \"x\"}"))).logDescription
             == "usage: response unreadable (malformedJSON)")
     }

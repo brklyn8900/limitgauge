@@ -27,7 +27,7 @@ public enum UsageProblem: Equatable, Sendable {
         case .keychainLocked: return "The login keychain is locked. Unlock it and refresh."
         case .keychainDenied: return "Access to Claude Code's Keychain item was denied. Refresh to try again."
         case .keychainTimedOut:
-            return "The Keychain read did not finish within \(ClaudeCodeCredentials.readTimeout.components.seconds) s. Refresh to try again."
+            return "The Keychain read did not finish within \(ClaudeCodeCredentials.readTimeoutText). Refresh to try again."
         case .keychainToolFailed: return "Could not read the Keychain through /usr/bin/security."
         case .credentialsUnreadable: return "Claude Code's Keychain item has a format limitgauge does not recognise."
         case .tokenRejected: return "Token expired. Run claude in a terminal to sign in again."
@@ -76,7 +76,7 @@ struct RefreshFailure: Error, Equatable {
         case .refused(let code):
             self.init(problem: code == 36 ? .keychainLocked : .keychainDenied, logDescription: "security: refused (exit \(code))")
         case .timedOut:
-            self.init(problem: .keychainTimedOut, logDescription: "security: no answer in 5 s, terminated")
+            self.init(problem: .keychainTimedOut, logDescription: "security: no answer in \(ClaudeCodeCredentials.readTimeoutText), terminated")
         case .failed(let code):
             self.init(problem: .keychainToolFailed, logDescription: "security: exit \(code)")
         case .launchFailed:
