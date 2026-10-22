@@ -46,7 +46,7 @@ public struct UsageAPI: Sendable {
         } catch let e as UsageDecoding.Error {
             throw .decoding(e)
         } catch {
-            throw .decoding(.malformedJSON(String(describing: error)))
+            throw .decoding(.malformedJSON)
         }
     }
 
@@ -57,7 +57,7 @@ public struct UsageAPI: Sendable {
         } catch let e as UsageDecoding.Error {
             throw .decoding(e)
         } catch {
-            throw .decoding(.malformedJSON(String(describing: error)))
+            throw .decoding(.malformedJSON)
         }
     }
 

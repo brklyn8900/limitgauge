@@ -93,7 +93,6 @@ struct RefreshFailure: Error, Equatable {
         case .httpStatus(let status):
             self.init(problem: .server(status), logDescription: "usage: HTTP \(status)")
         case .decoding(let decoding):
-            // The case name only: malformedJSON's text can quote the response.
             let name = switch decoding {
             case .missingLimits: "missingLimits"
             case .malformedJSON: "malformedJSON"

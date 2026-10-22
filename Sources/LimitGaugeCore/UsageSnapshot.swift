@@ -170,7 +170,7 @@ public struct Plan: Equatable, Sendable, Codable {
 public enum UsageDecoding {
     public enum Error: Swift.Error, Equatable {
         case missingLimits
-        case malformedJSON(String)
+        case malformedJSON
     }
 
     /// Decodes a usage response. Throws only when `limits[]` is missing or unreadable.
@@ -179,7 +179,7 @@ public enum UsageDecoding {
         do {
             raw = try JSONDecoder().decode(UsageResponse.self, from: data)
         } catch {
-            throw Error.malformedJSON(String(describing: error))
+            throw Error.malformedJSON
         }
         guard let elements = raw.limits?.value, !elements.isEmpty else { throw Error.missingLimits }
 
@@ -238,9 +238,9 @@ public enum UsageDecoding {
         do {
             raw = try JSONDecoder().decode(ProfileResponse.self, from: data)
         } catch {
-            throw Error.malformedJSON(String(describing: error))
+            throw Error.malformedJSON
         }
-        guard let tier = raw.organization?.rate_limit_tier else { throw Error.malformedJSON("organization.rate_limit_tier missing") }
+        guard let tier = raw.organization?.rate_limit_tier else { throw Error.malformedJSON }
         return Plan(rateLimitTier: tier)
     }
 }
