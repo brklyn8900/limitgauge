@@ -15,12 +15,13 @@ final class Notifier: NSObject, WarningDelivery, UNUserNotificationCenterDelegat
 
     /// Without this, macOS silences a notification while limitgauge is the frontmost app, as
     /// it is while Settings is open, yet `add` still succeeds and the warning counts as fired
-    /// (ADR-0005 point 2).
+    /// (ADR-0005 point 2). `.list` keeps it in Notification Center after the banner, as in the
+    /// background.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         Log.app.info("notification presented while limitgauge is frontmost")
-        return [.banner, .sound]
+        return [.banner, .list, .sound]
     }
 
     /// Asks for permission once. Notifications are on by default (proposal, Warnings). True
