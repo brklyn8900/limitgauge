@@ -36,8 +36,8 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         #expect(PollScheduler.nextPoll(snapshot: snap(session: 70, week: 20, fable: 10), failures: nil, thresholds: t) == now + 10 * 60)
     }
 
-    /// Replaces firedLimitsAreExcluded: the pace ignores past limits, warned or not, so an
-    /// undelivered warning cannot hold polling at ten minutes.
+    /// A limit past its threshold leaves the pace whether or not its warning was delivered, so
+    /// an undelivered warning cannot hold polling at ten minutes.
     @Test func pastLimitLeavesThePace() {
         let s = UsageSnapshot(limits: [
             RateLimit(kind: .session, percent: 90, resetsAt: now + 5 * 3600),
