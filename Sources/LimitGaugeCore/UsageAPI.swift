@@ -61,7 +61,7 @@ public struct UsageAPI: Sendable {
         }
     }
 
-    public static func request(_ url: URL, token: AccessToken) -> URLRequest {
+    private static func request(_ url: URL, token: AccessToken) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token.value)", forHTTPHeaderField: "Authorization")
