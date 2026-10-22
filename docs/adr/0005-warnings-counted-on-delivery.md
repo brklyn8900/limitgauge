@@ -35,7 +35,8 @@ The proposal is frozen, so these rules are recorded here.
 3. The notification's identifier is derived from the key, so delivering the same warning
    twice replaces it instead of stacking a second one.
 4. A limit whose window has reset since the last fetch is unknown: the menu shows a dash and
-   an empty bar, it does not light the warning dot, and it does not warn.
+   an empty bar, it does not light the warning dot, and it does not warn. The dot is redrawn
+   at that reset, and on wake, not only after the next refresh.
 
 ## Consequences
 

@@ -11,6 +11,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let warningDot = WarningDotView()
     private let openSettings: () -> Void
     private var isOpen = false
+    /// Redraws the icon when a past limit resets, which turns the dot off without a fetch.
+    private var dotTimer: Timer?
+    private var wakeObserver: NSObjectProtocol?
 
     // The footer is built once and kept. Removing and re-adding standard items while the
     // menu is open leaves AppKit's layout stale: a blank row under Quit, and Settings
@@ -38,6 +41,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             ])
         }
         addFooter()
+        // A timer's clock pauses during sleep, so a reset that passed during sleep is redrawn
+        // on wake rather than a sleep's length late.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateIcon() }
+        }
         update()
     }
 
@@ -170,8 +180,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     private func updateIcon() {
         item.button?.image = StatusIcon.image(for: Settings.icon)
-        let past = service.snapshot.map { Settings.thresholds.anyPast(in: $0, at: Date()) } ?? false
+        let now = Date()
+        let thresholds = Settings.thresholds
+        let past = service.snapshot.map { thresholds.anyPast(in: $0, at: now) } ?? false
         warningDot.isHidden = !(past && Settings.showsWarningDot)
+
+        dotTimer?.invalidate()
+        dotTimer = nil
+        guard let reset = service.snapshot.flatMap({ thresholds.earliestPastReset(in: $0, at: now) }) else { return }
+        let timer = Timer(fire: reset, interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateIcon() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        dotTimer = timer
     }
 }
 

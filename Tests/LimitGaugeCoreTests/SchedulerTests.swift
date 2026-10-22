@@ -193,3 +193,23 @@ private struct LegacyKey: Encodable {
     var kind: String
     var resetsAt: Date
 }
+
+@Suite struct WarningDotTests {
+    let t = WarningThresholds.default
+
+    /// The dot goes out by itself at the first reset of a past limit, which during a failure
+    /// streak can be up to an hour before the next refresh redraws it (ADR-0005 point 4).
+    @Test func dotGoesOutAtTheEarliestPastReset() {
+        let s = UsageSnapshot(limits: [
+            RateLimit(kind: .session, percent: 90, resetsAt: now + 20 * 60),
+            RateLimit(kind: .weeklyAll, percent: 95, resetsAt: weekReset),
+            RateLimit(kind: .weeklyScoped, percent: 10, resetsAt: now + 5 * 60, scopeName: "Fable"),
+        ], fetchedAt: now)
+        #expect(t.earliestPastReset(in: s, at: now) == now + 20 * 60)
+        #expect(t.earliestPastReset(in: s, at: now + 20 * 60) == weekReset)
+    }
+
+    @Test func noPastLimitNoRedraw() {
+        #expect(t.earliestPastReset(in: snap(session: 10, week: 20, fable: 10), at: now) == nil)
+    }
+}

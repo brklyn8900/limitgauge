@@ -28,6 +28,13 @@ public struct WarningThresholds: Equatable, Sendable, Codable {
         snapshot.limits.contains { state(of: $0, at: now) == .past }
     }
 
+    /// When the warning dot can change without a fetch: the earliest reset among limits past
+    /// their threshold at `now`, after which that limit is unknown (ADR-0005 point 4). Nil
+    /// when none is past.
+    public func earliestPastReset(in snapshot: UsageSnapshot, at now: Date) -> Date? {
+        snapshot.limits.filter { state(of: $0, at: now) == .past }.map(\.resetsAt).min()
+    }
+
     /// Where a limit stands against its threshold at `now`. The menu row, the warning dot,
     /// the warnings and the scheduler all read this one function, so "past" and "reset" mean
     /// the same thing everywhere.
