@@ -24,14 +24,17 @@ public struct UsageAPI: Sendable {
     }
 
     /// Ephemeral, with no cache, cookie or credential store, so neither the bearer request nor
-    /// the /profile body (which holds the account email) reaches disk. The resource timeout
-    /// bounds every fetch a refresh waits on; the default is seven days.
+    /// the /profile body (which holds the account email) reaches disk. A fetch without a network
+    /// waits for one, so a poll that fires on wake does not fail before Wi-Fi is back. The
+    /// resource timeout bounds that wait and every fetch a refresh waits on; the default is
+    /// seven days.
     static func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
         configuration.httpShouldSetCookies = false
+        configuration.waitsForConnectivity = true
         configuration.timeoutIntervalForResource = 30
         return URLSession(configuration: configuration)
     }

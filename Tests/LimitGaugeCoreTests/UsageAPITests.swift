@@ -14,4 +14,10 @@ import Testing
         #expect(configuration.httpShouldSetCookies == false)
         #expect(configuration.timeoutIntervalForResource == 30)
     }
+
+    /// A poll that fires on wake, before Wi-Fi is back, must wait for the network within the
+    /// resource timeout instead of failing at once as offline.
+    @Test func sessionWaitsForConnectivity() {
+        #expect(UsageAPI.makeSession().configuration.waitsForConnectivity)
+    }
 }
