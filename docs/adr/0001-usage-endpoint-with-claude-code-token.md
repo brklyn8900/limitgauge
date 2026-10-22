@@ -39,12 +39,15 @@ item `Claude Code-credentials`, next to a refresh token.
   with one request per refresh plus a daily profile request for the plan tier.
 - The app depends on an undocumented endpoint. The fixture tests use synthetic responses in
   the real one's shape, so they guard the decoder, not the endpoint. A change on the
-  endpoint's side shows first as an error in the menu and a decoding failure in the log.
+  endpoint's side shows in one of three ways: a missing or wholly unreadable `limits[]`, or
+  invalid JSON, shows an error in the menu; a reshaped `limits[]` element is dropped, with a
+  log line naming its kind; a renamed optional key hides its row without a message (point 4).
 - Signing in to Claude Code is the only sign-in. If Claude Code has been idle long enough for
   the access token to expire, the app is blind until Claude Code runs again. Accepted over
   the alternative of holding a refresh token of our own.
 - One macOS Keychain consent dialog on first read, and possibly again after Claude Code
-  recreates the item. The signature must be stable (ADR-0003).
+  recreates the item. The signature must be stable (ADR-0003). No longer so: ADR-0004 reads
+  the item through `/usr/bin/security`, which raises no dialog.
 
 ## Alternatives considered
 
