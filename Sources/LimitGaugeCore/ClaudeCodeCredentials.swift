@@ -78,7 +78,7 @@ public struct ClaudeCodeCredentials: Sendable {
             }
         }
         if let failure = Self.error(forExitCode: exit.status) { throw failure }
-        return try Self.parse(exit.stdout)
+        return try Self.parse(exit.stdout.data)
     }
 
     /// `security` exits with the low byte of the Security framework's status: 44

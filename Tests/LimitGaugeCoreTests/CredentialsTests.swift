@@ -81,6 +81,17 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
             try await standIn("head -c 300000 /dev/zero").read()
         }
     }
+
+    @Test func toolOutputNeverPrints() async throws {
+        let exit = try await ToolRun.run(.init(tool: URL(fileURLWithPath: "/bin/echo"), arguments: ["sk-ant-oat01-secret"]),
+                                         timeout: .seconds(5))
+        #expect(String(decoding: exit.stdout.data, as: UTF8.self).contains("secret"))
+        var dumped = ""
+        dump(exit, to: &dumped)
+        for text in ["\(exit)", "\(exit.stdout)", String(reflecting: exit), dumped] {
+            #expect(!text.contains("secret"))
+        }
+    }
 }
 
 @MainActor

@@ -9,8 +9,14 @@ struct ToolRun {
 
     struct Exit: Sendable {
         var status: Int32
-        /// The tool's stdout. May hold a secret: callers parse it and never log it.
-        var stdout: Data
+        var stdout: SecretOutput
+    }
+
+    struct SecretOutput: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+        let data: Data
+        var description: String { "SecretOutput(redacted)" }
+        var debugDescription: String { description }
+        var customMirror: Mirror { Mirror(self, children: [:]) }
     }
 
     enum Failure: Error, Equatable {
@@ -62,7 +68,7 @@ struct ToolRun {
             }
             exitAndEOF.notify(queue: .global()) {
                 deadline.cancel()
-                once.resume(.success(Exit(status: child.status, stdout: output.withLock { $0 })))
+                once.resume(.success(Exit(status: child.status, stdout: SecretOutput(data: output.withLock { $0 }))))
             }
         }
         return try result.get()
