@@ -27,12 +27,22 @@ func render(_ pixels: Int) -> NSBitmapImageRep {
     ctx.setShadow(offset: CGSize(width: 0, height: -12), blur: 30, color: NSColor.black.withAlphaComponent(0.45).cgColor)
     NSColor.white.set()
 
-    // Ring.
+    drawRing()
+    drawHourglass()
+    drawSand()
+    ctx.restoreGState()
+
+    NSGraphicsContext.restoreGraphicsState()
+    return rep
+}
+
+func drawRing() {
     let ring = NSBezierPath(ovalIn: NSRect(x: -300, y: -300, width: 600, height: 600))
     ring.lineWidth = 44
     ring.stroke()
+}
 
-    // Hourglass: two trapezoids meeting at a narrow waist, with the top and bottom bars.
+func drawHourglass() {
     let glass = NSBezierPath()
     glass.move(to: NSPoint(x: -120, y: 190))
     glass.line(to: NSPoint(x: 120, y: 190))
@@ -46,18 +56,15 @@ func render(_ pixels: Int) -> NSBitmapImageRep {
     glass.stroke()
     NSBezierPath(roundedRect: NSRect(x: -150, y: 176, width: 300, height: 40), xRadius: 20, yRadius: 20).fill()
     NSBezierPath(roundedRect: NSRect(x: -150, y: -216, width: 300, height: 40), xRadius: 20, yRadius: 20).fill()
+}
 
-    // Sand: a filled wedge in the lower bulb.
+func drawSand() {
     let sand = NSBezierPath()
     sand.move(to: NSPoint(x: -96, y: -172))
     sand.line(to: NSPoint(x: 96, y: -172))
     sand.line(to: NSPoint(x: 0, y: -40))
     sand.close()
     sand.fill()
-    ctx.restoreGState()
-
-    NSGraphicsContext.restoreGraphicsState()
-    return rep
 }
 
 for (points, scale) in [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2), (256, 1), (256, 2), (512, 1), (512, 2)] {
