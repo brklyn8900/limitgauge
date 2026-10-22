@@ -22,13 +22,15 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
     @Test func readIsTerminatedAtTheTimeout() async throws {
         let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent("limitgauge-\(UUID().uuidString).pid")
         defer { try? FileManager.default.removeItem(at: pidFile) }
-        let reader = standIn("echo $$ > '\(pidFile.path)'; exec /bin/sleep 30", timeout: .milliseconds(300))
+        // A second, so a slow shell start has written its pid before the deadline.
+        let reader = standIn("echo $$ > '\(pidFile.path)'; exec /bin/sleep 30", timeout: .seconds(1))
 
         let clock = ContinuousClock()
         let start = clock.now
         await #expect(throws: CredentialError.timedOut) { try await reader.read() }
-        // Far under the tool's 30 s, with room for a loaded machine.
-        #expect(clock.now - start < .seconds(10))
+        // Not before the deadline, and far under the tool's 30 s, with room for a loaded machine.
+        let elapsed = clock.now - start
+        #expect(elapsed >= .seconds(1) && elapsed < .seconds(10))
 
         let pid = try #require(pid_t(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
         var alive = true
@@ -48,13 +50,14 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         let pidFile = dir.appendingPathComponent("pid")
         let termFile = dir.appendingPathComponent("term")
         let reader = standIn("trap 'echo term >> \"\(termFile.path)\"' TERM; echo $$ > '\(pidFile.path)'; while :; do /bin/sleep 0.1; done",
-                             timeout: .milliseconds(300))
+                             timeout: .seconds(1))   // the trap is installed before the deadline
 
         await #expect(throws: CredentialError.timedOut) { try await reader.read() }
 
         let pid = try #require(pid_t(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
-        defer { kill(pid, SIGKILL) }
         var alive = true
+        // Only a pid seen alive: once it is reaped, the number may belong to another process.
+        defer { if alive { kill(pid, SIGKILL) } }
         for _ in 0..<50 where alive {
             try await Task.sleep(for: .milliseconds(100))
             alive = kill(pid, 0) == 0
