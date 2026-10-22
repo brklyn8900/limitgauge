@@ -121,7 +121,7 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
     @Test func aRefreshNotifiesAtStartAndEnd() async {
         let rig = Rig(usage: [.success(snapshot(at: t0))])
         var refreshing: [Bool] = []
-        rig.service.onChange = { refreshing.append(rig.service.isRefreshing) }
+        rig.onChange { service in refreshing.append(service.isRefreshing) }
         _ = await rig.service.refresh(.refreshRow).value
         #expect(refreshing == [true, false])
     }

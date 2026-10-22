@@ -64,7 +64,7 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
             return AccessToken("a")
         }, seed: snapshot(at: t0.addingTimeInterval(-2 * 3600)))
         var dueAtStart: [Date?] = []
-        rig.service.onChange = { if rig.service.isRefreshing { dueAtStart.append(rig.service.nextPoll) } }
+        rig.onChange { service in if service.isRefreshing { dueAtStart.append(service.nextPoll) } }
         _ = await rig.service.refresh(.poll).value
         #expect(dueAtStart == [nil])
         #expect(rig.service.nextPoll == t0.addingTimeInterval(3600))

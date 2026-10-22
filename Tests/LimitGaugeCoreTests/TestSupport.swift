@@ -109,6 +109,13 @@ final class Rig {
         service.deliveryTimeout = .milliseconds(200)
     }
 
+    /// Sets the service's `onChange`, handing it the service. A closure that captured the rig
+    /// would form a cycle through the service, the rig would never deinit, and its plist would
+    /// stay in the temporary directory.
+    func onChange(_ body: @escaping @MainActor (UsageService) -> Void) {
+        service.onChange = { [unowned service] in body(service) }
+    }
+
     deinit {
         UserDefaults().removePersistentDomain(forName: suiteName)
         try? FileManager.default.removeItem(atPath: suiteName + ".plist")
