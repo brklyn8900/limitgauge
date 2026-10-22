@@ -96,7 +96,8 @@ The [proposal](docs/proposal.md) is kept as written. These parts of it no longer
   nearest minute. See [ADR-0005](docs/adr/0005-warnings-counted-on-delivery.md).
 - **When a warning counts.** A warning counts as sent once it is delivered, not when it is
   due. One that can't be delivered, because notifications are off or not allowed, goes out
-  once they are on, if its window is still open. See
+  once they are on, if its window is still open: at once when you turn on limitgauge's switch,
+  and at the next refresh when you allow notifications in System Settings. See
   [ADR-0005](docs/adr/0005-warnings-counted-on-delivery.md).
 - **Test fixtures.** The proposal calls for a redacted real response. The fixtures are
   synthetic, in the real response's shape, so no account's usage is in the repository.
