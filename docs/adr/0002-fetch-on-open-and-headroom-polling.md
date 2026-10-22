@@ -20,7 +20,8 @@ idle and too seldom when a five-hour window is being spent quickly.
 
 1. **Menu open shows the cached snapshot at once.** If the last fetch attempt, successful or
    not, is older than two minutes, a fetch runs in the background and the rows update in
-   place. A Refresh item forces a fetch.
+   place. A poll that sent no request (point 3) is not counted, so the first menu open after
+   one fetches. A Refresh item forces a fetch.
 2. **Background polls exist only for warnings.** After every successful fetch, compute each
    limit's headroom: warning threshold minus current percent, in percentage points. The least
    headroom among limits still below their threshold picks the next poll: over 40 points,
@@ -32,9 +33,9 @@ idle and too seldom when a five-hour window is being spent quickly.
    up to 60. A 429: 30 minutes, then 60. Failures only the user can fix (no credentials, a
    rejected token, a locked, refused or timed-out Keychain read, an unreadable Keychain item, a
    failing `security` tool): 60 minutes. A poll does not resend a token the endpoint has
-   rejected, and does not run a Keychain read again after one was refused or timed out, so a
-   Keychain dialog cannot return on every poll; opening the menu or Refresh does both. The
-   first success returns to headroom pacing.
+   rejected, and does not run a Keychain read again after one found the keychain locked
+   (exit 36), was refused or timed out, so a Keychain dialog cannot return on every poll;
+   opening the menu or Refresh does both. The first success returns to headroom pacing.
 4. Any fetch attempt restarts the clock, so a user who opens the menu often pays for no extra
    polls.
 5. No timer fires while the Mac sleeps. On wake the timer is re-armed for the same time, so
