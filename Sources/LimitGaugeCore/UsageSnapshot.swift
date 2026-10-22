@@ -201,7 +201,9 @@ public enum UsageDecoding {
         }
         guard !limits.isEmpty else { throw Error.missingLimits }
         if !unreadable.isEmpty {
-            Log.fetch.error("usage: dropped \(unreadable.count) of \(elements.count) limits[] elements as unreadable")
+            // Kinds are the endpoint's own enum strings, never account data, so they are public.
+            let kinds = unreadable.map { $0.isEmpty ? "(no kind)" : $0 }.joined(separator: ", ")
+            Log.fetch.error("usage: dropped \(unreadable.count) of \(elements.count) limits[] elements as unreadable: \(kinds, privacy: .public)")
         }
 
         let cloud = raw.iguana_necktie?.value.flatMap { c -> DollarAllowance? in
