@@ -12,12 +12,13 @@ extension UsageAPI: UsageFetching {}
 /// Why a refresh was asked for. The service, not the caller, decides what each reason means,
 /// so the two-minute cache lives in one tested place.
 public enum RefreshReason: String, Sendable {
-    /// App launch and menu open: fetch only if the snapshot is over two minutes old
-    /// (ADR-0002 point 1).
+    /// App launch and menu open: fetch only if the last attempt is over two minutes old, or
+    /// was a poll that sent nothing (ADR-0002 point 1).
     case launch, menuOpen
     /// The Refresh row: always fetch.
     case refreshRow
-    /// The poll timer firing at `nextPoll`: always fetch.
+    /// The poll timer firing at `nextPoll`: always an attempt, but it sends nothing after a
+    /// refused or timed-out read, or with a rejected token (ADR-0002 point 3).
     case poll
 }
 

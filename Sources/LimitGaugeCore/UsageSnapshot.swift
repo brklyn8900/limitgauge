@@ -152,7 +152,7 @@ public struct Plan: Equatable, Sendable, Codable {
         self.rateLimitTier = rateLimitTier
     }
 
-    /// "default_claude_max_5x" -> "Max 5x". Unknown tiers fall back to the raw value.
+    /// "default_claude_max_5x" -> "Max 5x". A tier with no words falls back to the raw value.
     public var displayName: String {
         var tier = rateLimitTier
         for prefix in ["default_claude_", "claude_"] where tier.hasPrefix(prefix) {

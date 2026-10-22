@@ -95,7 +95,7 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
         }
     }
 
-    /// A fractional percent in one element drops that element, not the fetch (ADR-0001 point 4).
+    /// A fractional percent in one element drops that element, not the fetch (ADR-0001, Consequences).
     @Test func oneMalformedLimitIsDropped() throws {
         let data = Data("""
         {"limits": [{"kind": "session", "percent": 12.5, "resets_at": "2030-01-07T05:00:00+00:00"},
