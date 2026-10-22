@@ -1,107 +1,137 @@
 # limitgauge
 
-A macOS menu bar app that shows your Claude subscription's usage limits: session, week and
-model week with their reset times, credits, and the weekly breakdown. The same numbers as the
-Usage page in claude.ai settings, one click away, plus a notification before you hit a limit.
+<p align="center">
+	<img src="docs/images/menu-warning.png" width="324" alt="The limitgauge menu: plan, current session, this week, and Fable this week with reset times, credits, and the week by surface. Fable this week is past its threshold, so its bar is red and the icon has a red dot.">
+</p>
 
-It reads the account usage endpoint with the token Claude Code already keeps in your
-Keychain. Nothing to configure, nothing to paste, and it never writes credentials. Details in
-the [proposal](docs/proposal.md); decisions in the [ADRs](docs/adr/).
+limitgauge shows your Claude plan's usage limits in the macOS menu bar. Click the icon to see
+the current session, this week, and the weekly model limit, each with its reset time. The menu
+also shows your credits and how the week splits across Claude Code, chats, and Cowork. These
+are the same numbers as the Usage page in claude.ai settings.
+
+When a limit passes a threshold you set, limitgauge sends a notification and puts a red dot on
+its icon. It reads the sign-in that Claude Code already keeps in your Keychain, so you have
+nothing to configure and no token to paste.
 
 limitgauge is unofficial and not affiliated with Anthropic.
 
+## Why limitgauge
+
+limitgauge never raises a Keychain dialog, never refreshes or rewrites Claude Code's sign-in,
+and calls only two read-only endpoints on `api.anthropic.com`. In the background, it checks
+hourly while your limits are far from their thresholds and every 10 minutes when one gets close.
+
+## Requirements
+
+- macOS 26 or later.
+- Xcode 26, or its command line tools.
+- Claude Code, signed in with your Claude subscription on this Mac.
+
 ## Install
 
-Requires macOS 26, Xcode 26 or its command line tools, and a Claude Code sign-in on this
-machine. From a checkout:
+limitgauge has no prebuilt download. Build it from source:
 
-    make install
+	git clone https://github.com/eladefrati/limitgauge.git
+	cd limitgauge
+	make install
 
-Open limitgauge from Applications. It runs as an icon in the menu bar, with no Dock icon. At
-first launch, macOS asks whether limitgauge may send notifications.
+`make install` builds the app, signs it, and copies it to `/Applications`. Open **limitgauge**
+from Applications. It runs in the menu bar and has no Dock icon. On first launch, macOS asks
+whether limitgauge can send notifications.
+
+If your keychain has an Apple Development certificate, `make install` signs with the first
+one it finds. To use a different one, run `make install SIGN_IDENTITY="<certificate name>"`.
+Without a certificate, `make install` signs the build ad hoc, and macOS can reset the
+notification permission and **Launch at login** each time you rebuild.
 
 limitgauge raises no Keychain dialog. If macOS asks for access to the "Claude
-Code-credentials" item, don't approve it. Choose Deny. limitgauge doesn't need that access,
-and the dialog means something outside limitgauge changed, most likely how Claude Code stores
-the item ([ADR-0004](docs/adr/0004-read-credentials-through-security-cli.md)).
+Code-credentials" item, choose **Deny**. limitgauge doesn't need that access. The dialog means
+something outside limitgauge changed, most likely how Claude Code stores the item
+([ADR-0004](docs/adr/0004-read-credentials-through-security-cli.md)).
 
-## Use
+## Read your limits
 
-- Click the icon. The dropdown shows your plan, each limit with its percent and reset time,
-  credits, and how the week splits across Claude Code, chats and other surfaces.
-- Numbers refresh when you open the menu. A red dot on the icon means a limit is past its
-  warning threshold.
-- While no five-hour window is open, the endpoint reports no session limit. The menu then
-  shows **Current session** at 0% with no reset time.
-- Settings: warning thresholds per limit, notifications, the warning dot, icon, launch at
-  login.
+- Click the icon. The menu shows your plan, each limit with its percent and reset time, your
+  credits, and the week by surface.
+- limitgauge fetches new numbers when you open the menu, if the last fetch is more than two
+  minutes old. **Refresh** fetches at once.
+- A red dot on the icon means a limit is past its warning threshold.
+- While no five-hour window is open, **Current session** shows 0% and no reset time.
+
+Between fetches, limitgauge checks in the background only to send warnings. The closer a limit
+is to its threshold, the sooner the next check: every 60, 30, or 10 minutes. After a failed
+fetch, the checks space out.
+[ADR-0002](docs/adr/0002-fetch-on-open-and-headroom-polling.md) has the full rules.
+
+## Set thresholds and the icon
+
+<p align="center">
+	<img src="docs/images/settings.png" width="400" alt="limitgauge Settings: warning thresholds for the current session, this week, and Fable this week, the notification switch, the menu bar icon, the red dot switch, and Launch at login.">
+	<img src="docs/images/icon-styles.png" width="400" alt="The menu bar icon picker: Hourglass in circle, Hourglass, Drop in circle, Gauge, Bars, and Timer.">
+</p>
+
+Choose **Settings…** from the menu to set:
+
+- a warning threshold for each limit, in percent,
+- whether limitgauge sends notifications,
+- the menu bar icon, from six styles, and whether it shows the red dot,
+- whether limitgauge opens at login.
 
 ## Your token and the network
 
-limitgauge reads Claude Code's OAuth access token by running
-`/usr/bin/security find-generic-password -s "Claude Code-credentials" -w`, the same command
-Claude Code uses to read the item. It sends the token only to `api.anthropic.com`. It keeps
-the token in memory and never writes it to disk or to the log. It never refreshes the token
-either. When the token expires, the menu tells you to run `claude`, which gets a new one.
+limitgauge reads Claude Code's OAuth access token with this command, the same one Claude Code
+uses for the Keychain item:
 
-The usage endpoint, `/api/oauth/usage`, is undocumented. Anthropic can change or remove it
+	/usr/bin/security find-generic-password -s "Claude Code-credentials" -w
+
+It sends the token only to `api.anthropic.com`, in the `Authorization` header of `GET`
+requests to two endpoints:
+
+| Endpoint | What limitgauge reads | How often |
+|---|---|---|
+| `/api/oauth/usage` | Your limits, credits, and the week by surface | On each fetch |
+| `/api/oauth/profile` | Your plan name | At most once a day |
+
+limitgauge makes no other network requests. It keeps the token in memory only and never writes
+it to disk or to the log. It never refreshes the token or changes the Keychain item. When the
+token expires, the menu tells you to run `claude` in a terminal, which signs you in again.
+
+Neither endpoint is part of Anthropic's documented API. Anthropic can change or remove them
 without notice. Depending on the change, limitgauge then shows an error instead of numbers, or
 a row goes missing from the menu with no error. See
 [ADR-0001](docs/adr/0001-usage-endpoint-with-claude-code-token.md).
 
-Opening the menu fetches when the last fetch attempt is more than two minutes old, and
-**Refresh** fetches at once. Between those, limitgauge polls in the background only to send
-warnings. The limit closest to its warning threshold sets the next poll:
+## What limitgauge stores
 
-| Points left below the threshold | Next poll |
-|---|---|
-| more than 40 | 60 min |
-| 15 to 40 | 30 min |
-| under 15 | 10 min |
+In its preferences, under `io.github.eladefrati.limitgauge`, limitgauge keeps its settings, the
+last usage numbers, your plan name, and a record of the warnings it sent. The profile response
+also holds your account email. limitgauge keeps only the plan name from it. It doesn't cache
+responses, so no response reaches disk.
 
-A limit already past its threshold doesn't count. limitgauge polls one minute after that limit
-resets, if that comes sooner. Any fetch restarts the clock, so opening the menu often adds no
-polls. After a failed fetch, polls back off. A network error or a server error waits 10
-minutes, then doubles up to 60. A rate limit waits 30 minutes, then 60. A failure only you can
-fix, such as a missing sign-in, waits 60 minutes. After a locked, refused or unanswered Keychain
-read, polls stop reading the Keychain until you open the menu or press **Refresh**.
-[ADR-0002](docs/adr/0002-fetch-on-open-and-headroom-polling.md) has the full rules.
+limitgauge logs failures to the macOS unified log, never the token or a response body. To watch
+the log, run `make log`.
+
+## Uninstall
+
+1. In **Settings…**, turn off **Launch at login**.
+2. Quit limitgauge from its menu.
+3. Delete `/Applications/limitgauge.app`.
+4. To delete its stored settings and numbers too, run
+   `defaults delete io.github.eladefrati.limitgauge`.
 
 ## Develop
 
-`make test` runs the tests. `make run` builds the bundle, quits a running limitgauge, and
-opens the new build from `build/limitgauge.app`.
+`make test` runs the tests. `make run` builds the app, quits a running limitgauge, and opens the
+new build from `build/limitgauge.app`.
 
-Run limitgauge only from its bundle. `swift run` and `.build/release/limitgauge` crash at
+Run limitgauge only from its app bundle. `swift run` and `.build/release/limitgauge` crash at
 launch, because Notification Center needs the bundle's identifier.
 
-## Changes since the proposal
+The [proposal](docs/proposal.md) is the original design, kept as written. The
+[ADRs](docs/adr/) record the decisions since, and
+[changes since the proposal](docs/changes-since-proposal.md) lists where limitgauge differs
+from the proposal.
 
-The [proposal](docs/proposal.md) is kept as written. These parts of it no longer hold:
+## License
 
-- **Keychain access.** The consent dialog, the Always Allow step, and the `claude setup-token`
-  fallback are gone. limitgauge reads the item through `/usr/bin/security`, which the item
-  already trusts. See [ADR-0004](docs/adr/0004-read-credentials-through-security-cli.md).
-- **The idle session row.** The proposal hides a row whose field is missing from the response.
-  The endpoint drops the session limit while no five-hour window is open, so the menu shows
-  **Current session** at 0% instead of hiding the row.
-- **Poll pacing.** The proposal leaves out a limit whose warning has fired. limitgauge leaves
-  out every limit at or past its threshold, warned or not, so a warning that could not be
-  delivered doesn't hold polling at 10 minutes. See
-  [ADR-0002](docs/adr/0002-fetch-on-open-and-headroom-polling.md).
-- **The menu cache and the poll clock.** The proposal times the two-minute menu cache from the
-  snapshot. limitgauge times it, and the poll clock, from the last fetch attempt, failed or
-  not, so a failing endpoint isn't asked again on every menu open. A poll that sent no request
-  moves only the poll clock. See [ADR-0002](docs/adr/0002-fetch-on-open-and-headroom-polling.md).
-- **The warning key.** The proposal keys a warning on the limit and its `resets_at`. The
-  endpoint shifts `resets_at` by under a second between fetches, so the key rounds it to the
-  nearest minute. See [ADR-0005](docs/adr/0005-warnings-counted-on-delivery.md).
-- **When a warning counts.** A warning counts as sent once it is delivered, not when it is
-  due. One that can't be delivered, because notifications are off or not allowed, goes out
-  once they are on, if its window is still open: at once when you turn on limitgauge's switch,
-  and at the next refresh when you allow notifications in System Settings. See
-  [ADR-0005](docs/adr/0005-warnings-counted-on-delivery.md).
-- **Test fixtures.** The proposal calls for a redacted real response. The fixtures are
-  synthetic, in the real response's shape, so no account's usage is in the repository.
-- **The Anthropic mark.** It is not one of the icon choices. It was dropped on trademark
-  grounds.
+MIT. See [LICENSE](LICENSE).
