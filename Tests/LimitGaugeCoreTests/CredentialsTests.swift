@@ -17,8 +17,8 @@ private func reading(_ reader: ClaudeCodeCredentials) -> TokenReader {
 private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
 
 @Suite struct CredentialReadTests {
-    /// Today the wait starts only after stdout reaches EOF, which a stuck tool never sends, so
-    /// the deadline cannot fire. The tool must be gone afterwards, not just abandoned.
+    /// The deadline fires while the tool is stuck and has sent no EOF, and the tool is gone
+    /// afterwards, not just abandoned (ADR-0004 point 3).
     @Test func readIsTerminatedAtTheTimeout() async throws {
         let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent("limitgauge-\(UUID().uuidString).pid")
         defer { try? FileManager.default.removeItem(at: pidFile) }
@@ -108,8 +108,8 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         return (rig.service.problem, rig.fetcher.usageTokens)
     }
 
-    /// Today a malformed item, exit 51 and a tool that cannot launch all say "Sign in with
-    /// Claude Code", which is wrong for a user who is signed in.
+    /// A malformed item, exit 51 and a tool that cannot launch each have their own problem,
+    /// and none tells a signed-in user to sign in (ADR-0004 point 2).
     @Test func malformedRefusedAndLaunchFailureAreTheirOwnProblems() async {
         let malformed = await problem(after: standIn("printf '{}'"))
         let refused = await problem(after: standIn("exit 51"))
@@ -155,8 +155,7 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
 
 @MainActor
 @Suite struct RereadTests {
-    /// A re-read after a 401 that fails reports its own problem; today try? hid it as a
-    /// rejected token.
+    /// A re-read after a 401 that fails reports its own problem, not a rejected token.
     @Test func failedRereadReportsItsOwnProblem() async {
         let reads = Mutex(0)
         let rig = Rig(usage: [.failure(.unauthorized)], readToken: { () async throws(CredentialError) -> AccessToken in

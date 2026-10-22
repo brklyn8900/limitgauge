@@ -28,8 +28,8 @@ final class GatedDelivery: WarningDelivery {
 
 @MainActor
 @Suite struct WarningDeliveryTests {
-    /// Today the warning counts as posted before delivery, so with notifications off the
-    /// window's warning is lost.
+    /// A warning counts as posted only once delivered, so one declined while notifications are
+    /// off goes out when they come back on, and only once (ADR-0005 point 2).
     @Test func undeliveredWarningStaysPendingUntilAccepted() async {
         let delivery = RecordingDelivery(accepting: false)
         let rig = Rig(usage: [.success(snapshot(percent: 90))], delivery: delivery)
@@ -60,8 +60,9 @@ final class GatedDelivery: WarningDelivery {
         delivery.release(accepting: true)
     }
 
-    /// Today every fetch made a new key and the Fable warning re-fired (seen 2026-10-21). The
-    /// request identifier comes from the key, so a repeat would replace, not stack.
+    /// Fetches whose `resets_at` differ by under a second are one window, so the warning
+    /// fires once (ADR-0005 point 1). The request identifier comes from the key, so a repeat
+    /// would replace, not stack.
     @Test func jitteredResetDoesNotRefire() async throws {
         let a = try #require(ISO8601.date("2026-10-21T21:10:00.462+00:00"))
         let b = try #require(ISO8601.date("2026-10-21T21:09:59.776+00:00"))
@@ -93,7 +94,8 @@ final class GatedDelivery: WarningDelivery {
 
 @MainActor
 @Suite struct ResetLimitTests {
-    /// Today a limit whose window reset while fetches failed still warns with its old percent.
+    /// A limit whose window reset since the last fetch is unknown and does not warn with its
+    /// old percent (ADR-0005 point 4).
     @Test func limitPastItsResetDoesNotWarn() async {
         let stale = UsageSnapshot(limits: [RateLimit(kind: .session, percent: 90, resetsAt: t0.addingTimeInterval(-60))],
                                   fetchedAt: t0.addingTimeInterval(-3 * 3600))

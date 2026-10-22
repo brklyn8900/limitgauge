@@ -10,18 +10,19 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
                   fetchedAt: date)
 }
 
-/// The review's first critical bug: after a failed fetch the next poll came 5 to 65 seconds
-/// later, forever, and with no snapshot polling stopped.
+/// Polling after failures (ADR-0002 point 3): every failure is followed by exactly one poll,
+/// backed off from the attempt, never seconds later and never not at all.
 @MainActor
 @Suite struct PollingAfterFailureTests {
-    /// Today: no snapshot, so no due time, so no poll ever again.
+    /// With no snapshot to pace from, the backoff alone schedules the next poll.
     @Test func failureWithoutSnapshotSchedulesARetry() async {
         let rig = Rig(readToken: failing(.notFound))
         #expect(await rig.service.refresh(.poll).value == .failed(.noCredentials))
         #expect(rig.service.nextPoll == t0.addingTimeInterval(60 * 60))      // needs the user: hourly
     }
 
-    /// Today: due = the old snapshot's fetch time plus its interval, hours in the past.
+    /// A stale snapshot's pace is hours in the past; the backoff from the attempt decides, and
+    /// the old snapshot stays.
     @Test func failureWithStaleSnapshotBacksOffFromTheAttempt() async {
         let rig = Rig(usage: [.failure(.transport(URLError(.notConnectedToInternet)))],
                       seed: snapshot(at: t0.addingTimeInterval(-3 * 3600)))
