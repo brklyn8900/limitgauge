@@ -49,10 +49,23 @@ extension Date {
 /// Consecutive failed attempts since the last success. Nil on the service while the last
 /// attempt succeeded, so "is there a problem" and "are we backing off" cannot disagree.
 struct FailureStreak: Equatable, Sendable {
-    var problem: UsageProblem
-    /// At least 1.
-    var count: Int
-    var lastAttempt: Date
+    let problem: UsageProblem
+    let count: Int
+    let lastAttempt: Date
+
+    static func first(_ problem: UsageProblem, at date: Date) -> FailureStreak {
+        FailureStreak(problem: problem, count: 1, lastAttempt: date)
+    }
+
+    func next(_ problem: UsageProblem, at date: Date) -> FailureStreak {
+        FailureStreak(problem: problem, count: count + 1, lastAttempt: date)
+    }
+
+    private init(problem: UsageProblem, count: Int, lastAttempt: Date) {
+        self.problem = problem
+        self.count = count
+        self.lastAttempt = lastAttempt
+    }
 }
 
 /// Background poll pacing (ADR-0002). A pure function of the snapshot, the failure streak and

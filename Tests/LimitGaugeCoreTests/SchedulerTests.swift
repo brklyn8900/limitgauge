@@ -15,7 +15,7 @@ private func snap(session: Int, week: Int, fable: Int, fetchedAt: Date = now) ->
 }
 
 private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offline) -> FailureStreak {
-    FailureStreak(problem: problem, count: count, lastAttempt: date)
+    (1..<count).reduce(FailureStreak.first(problem, at: date)) { streak, _ in streak.next(problem, at: date) }
 }
 
 @Suite struct PollSchedulerTests {

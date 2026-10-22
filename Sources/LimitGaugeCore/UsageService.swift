@@ -166,9 +166,9 @@ public final class UsageService {
             }
             outcome = .fetched
         } catch {
-            let count = (failures?.count ?? 0) + 1
-            failures = FailureStreak(problem: error.problem, count: count, lastAttempt: started)
-            Log.fetch.error("usage fetch failed (\(count) in a row): \(error.logDescription, privacy: .public)")
+            let streak = failures?.next(error.problem, at: started) ?? .first(error.problem, at: started)
+            failures = streak
+            Log.fetch.error("usage fetch failed (\(streak.count) in a row): \(error.logDescription, privacy: .public)")
             outcome = .failed(error.problem)
         }
         await deliverDueWarnings()
