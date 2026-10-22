@@ -3,6 +3,8 @@ import Synchronization
 @testable import LimitGaugeCore
 
 final class ScriptedFetcher: UsageFetching, Sendable {
+    static let unscripted = UsageAPI.Error.httpStatus(599)
+
     private struct State {
         var usageResults: [Result<UsageSnapshot, UsageAPI.Error>]
         var planResults: [Result<Plan, UsageAPI.Error>]
@@ -22,7 +24,7 @@ final class ScriptedFetcher: UsageFetching, Sendable {
     func fetchUsage(token: AccessToken) async throws(UsageAPI.Error) -> UsageSnapshot {
         let result: Result<UsageSnapshot, UsageAPI.Error> = state.withLock {
             $0.usageTokens.append(token.value)
-            return $0.usageResults.isEmpty ? .failure(.httpStatus(599)) : $0.usageResults.removeFirst()
+            return $0.usageResults.isEmpty ? .failure(Self.unscripted) : $0.usageResults.removeFirst()
         }
         return try result.get()
     }
@@ -30,7 +32,7 @@ final class ScriptedFetcher: UsageFetching, Sendable {
     func fetchPlan(token: AccessToken) async throws(UsageAPI.Error) -> Plan {
         let result: Result<Plan, UsageAPI.Error> = state.withLock {
             $0.planTokens.append(token.value)
-            return $0.planResults.isEmpty ? .failure(.httpStatus(599)) : $0.planResults.removeFirst()
+            return $0.planResults.isEmpty ? .failure(Self.unscripted) : $0.planResults.removeFirst()
         }
         return try result.get()
     }

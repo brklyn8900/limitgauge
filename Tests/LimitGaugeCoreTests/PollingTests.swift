@@ -67,12 +67,12 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
 
     @Test func menuOpenWithinTwoMinutesOfAFailureIsSkipped() async {
         let clock = TestClock(t0)
-        let rig = Rig(clock: clock)                                           // fetcher answers 599
+        let rig = Rig(usage: [.failure(.httpStatus(503)), .failure(.httpStatus(503))], clock: clock)
         _ = await rig.service.refresh(.poll).value
         clock.advance(60)
         #expect(await rig.service.refresh(.menuOpen).value == .skipped)
         clock.advance(61)
-        #expect(await rig.service.refresh(.menuOpen).value == .failed(.server(599)))
+        #expect(await rig.service.refresh(.menuOpen).value == .failed(.server(503)))
         #expect(rig.fetcher.usageTokens.count == 2)
     }
 
