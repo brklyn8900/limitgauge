@@ -27,11 +27,12 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         let clock = ContinuousClock()
         let start = clock.now
         await #expect(throws: CredentialError.timedOut) { try await reader.read() }
-        #expect(clock.now - start < .seconds(2))
+        // Far under the tool's 30 s, with room for a loaded machine.
+        #expect(clock.now - start < .seconds(10))
 
         let pid = try #require(pid_t(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
         var alive = true
-        for _ in 0..<30 where alive {
+        for _ in 0..<50 where alive {
             try await Task.sleep(for: .milliseconds(100))
             alive = kill(pid, 0) == 0
         }
@@ -85,7 +86,7 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
 @Suite struct CredentialReadIsolationTests {
     /// A slow Keychain read must not block the main actor: the menu stays responsive.
     @Test func readLeavesTheMainActorFree() async throws {
-        let reader = standIn("/bin/sleep 0.5; printf '%s' '\(item)'")
+        let reader = standIn("/bin/sleep 2; printf '%s' '\(item)'")
         let rig = Rig(readToken: reading(reader))
         let clock = ContinuousClock()
         let start = clock.now
@@ -93,7 +94,8 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         let marker = Task { @MainActor in clock.now }
         let mainRan = await marker.value - start
         _ = await refresh.value
-        #expect(mainRan < .milliseconds(300))
+        // Well under the tool's 2 s, so only a blocked main actor fails it.
+        #expect(mainRan < .milliseconds(1500))
         #expect(rig.fetcher.usageTokens == ["sk-ant-oat01-test"])
     }
 }

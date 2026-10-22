@@ -51,7 +51,10 @@ final class GatedDelivery: WarningDelivery {
         let delivery = GatedDelivery()
         let rig = Rig(usage: [.success(snapshot(percent: 90))], delivery: delivery)
         _ = rig.service.refresh(.refreshRow)
-        try await Task.sleep(for: .milliseconds(500))
+        // The delivery never answers, so the refresh ends only if the 200 ms deadline fires.
+        for _ in 0..<50 where rig.service.isRefreshing {
+            try await Task.sleep(for: .milliseconds(100))
+        }
         #expect(!rig.service.isRefreshing)
         #expect(rig.store.loadFiredWarnings().isEmpty)
         delivery.release(accepting: true)
