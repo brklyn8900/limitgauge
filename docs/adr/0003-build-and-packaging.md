@@ -1,12 +1,15 @@
 ---
 title: "ADR-0003: SwiftPM executable, Makefile bundle, Apple Development signing"
-status: Accepted
+status: Accepted; the Keychain grant reasoning no longer applies since ADR-0004
 date: 2026-10-18
 ---
 
 # ADR-0003: Build and packaging
 
-**Status:** Accepted
+**Status:** Accepted. The Keychain grant in Context and Consequences no longer applies: since
+[ADR-0004](0004-read-credentials-through-security-cli.md) the item is read through
+`/usr/bin/security`, whose access does not depend on limitgauge's signature. A stable
+signature still keeps notification permission and launch at login across rebuilds.
 
 ## Context
 

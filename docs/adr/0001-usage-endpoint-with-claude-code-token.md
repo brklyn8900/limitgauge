@@ -37,8 +37,9 @@ item `Claude Code-credentials`, next to a refresh token.
 
 - Full coverage of the Usage page, including the model-scoped weekly limit and the credits,
   with one request per refresh plus a daily profile request for the plan tier.
-- The app depends on an undocumented endpoint. A fixture test against a real response is the
-  early warning when it changes.
+- The app depends on an undocumented endpoint. The fixture tests use synthetic responses in
+  the real one's shape, so they guard the decoder, not the endpoint. A change on the
+  endpoint's side shows first as an error in the menu and a decoding failure in the log.
 - Signing in to Claude Code is the only sign-in. If Claude Code has been idle long enough for
   the access token to expire, the app is blind until Claude Code runs again. Accepted over
   the alternative of holding a refresh token of our own.
