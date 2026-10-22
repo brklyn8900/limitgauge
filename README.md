@@ -87,6 +87,10 @@ The [proposal](docs/proposal.md) is kept as written. These parts of it no longer
   out every limit at or past its threshold, warned or not, so a warning that could not be
   delivered doesn't hold polling at 10 minutes. See
   [ADR-0002](docs/adr/0002-fetch-on-open-and-headroom-polling.md).
+- **The menu cache and the poll clock.** The proposal times the two-minute menu cache from the
+  snapshot. limitgauge times it, and the poll clock, from the last fetch attempt, failed or
+  not, so a failing endpoint isn't asked again on every menu open. A poll that sent no request
+  moves only the poll clock. See [ADR-0002](docs/adr/0002-fetch-on-open-and-headroom-polling.md).
 - **The warning key.** The proposal keys a warning on the limit and its `resets_at`. The
   endpoint shifts `resets_at` by under a second between fetches, so the key rounds it to the
   nearest minute. See [ADR-0005](docs/adr/0005-warnings-counted-on-delivery.md).
