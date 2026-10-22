@@ -25,7 +25,8 @@ public enum UsageProblem: Equatable, Sendable {
         switch self {
         case .noCredentials: return "Sign in with Claude Code to see usage."
         case .keychainLocked: return "The login keychain is locked. Unlock it and refresh."
-        case .keychainDenied: return "Access to Claude Code's Keychain item was denied. Refresh to try again."
+        // No "Refresh": after Deny, as the README advises, a refresh brings the same dialog back.
+        case .keychainDenied: return "Access to Claude Code's Keychain item was denied. See the Keychain note in limitgauge's README."
         case .keychainTimedOut:
             return "The Keychain read did not finish within \(ClaudeCodeCredentials.readTimeoutText). Refresh to try again."
         case .keychainToolFailed: return "Could not read the Keychain through /usr/bin/security."

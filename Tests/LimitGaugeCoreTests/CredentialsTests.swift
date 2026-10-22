@@ -143,6 +143,14 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         #expect(Set([UsageProblem.keychainLocked, .keychainDenied, .keychainTimedOut].map(\.message)).count == 3)
     }
 
+    /// The README tells users to choose Deny, so the message must not send them to Refresh,
+    /// which brings the same dialog back. It points to the README's Keychain note instead.
+    @Test func deniedDoesNotSendTheUserToRefresh() {
+        let denied = UsageProblem.keychainDenied.message
+        #expect(!denied.localizedCaseInsensitiveContains("refresh"))
+        #expect(denied.contains("README"))
+    }
+
     /// The log line names the cause with its code and nothing else.
     @Test func logLinesCarryTheExitCode() {
         #expect(RefreshFailure(CredentialError.refused(exitCode: 51)).logDescription == "security: refused (exit 51)")
