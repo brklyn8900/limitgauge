@@ -31,10 +31,13 @@ The proposal is frozen, so these rules are recorded here.
 2. A warning counts as fired once Notification Center accepts it. limitgauge checks its own
    switch and the macOS authorization before handing it over, and waits at most ten seconds.
    A warning that is not delivered stays due for its window and goes out after the next
-   refresh or settings change, including when notifications are turned on. Delivered includes
-   shown: limitgauge is Notification Center's delegate and presents a warning as a banner with
-   sound even while it is the frontmost app, as it is while Settings is open. Without that,
-   macOS silences it there while still accepting it.
+   refresh or settings change, including when notifications are turned on. limitgauge is
+   Notification Center's delegate and presents a warning in the foreground as in the
+   background: a banner with sound, kept in Notification Center's list, even while it is the
+   frontmost app, as it is while Settings is open. Without that, macOS silences it there while
+   still accepting it. Accepted is not seen: with a Focus on, or limitgauge's alert style set
+   to None, Notification Center accepts a warning that may never be seen, and it counts as
+   fired.
 3. The notification's identifier is derived from the key, so delivering the same warning
    twice replaces it instead of stacking a second one.
 4. A limit whose window has reset since the last fetch is unknown: the menu shows a dash and
