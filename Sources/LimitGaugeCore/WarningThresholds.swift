@@ -23,14 +23,9 @@ public struct WarningThresholds: Equatable, Sendable, Codable {
         }
     }
 
-    /// Drives the warning dot. A limit whose window has reset is unknown, not past.
-    public func anyPast(in snapshot: UsageSnapshot, at now: Date) -> Bool {
-        snapshot.limits.contains { state(of: $0, at: now) == .past }
-    }
-
-    /// When the warning dot can change without a fetch: the earliest reset among limits past
-    /// their threshold at `now`, after which that limit is unknown (ADR-0005 point 4). Nil
-    /// when none is past.
+    /// Drives the warning dot: nil when no limit is past its threshold at `now`, so the dot is
+    /// off; otherwise the earliest reset among those limits, when the dot can change without a
+    /// fetch, since after it that limit is unknown, not past (ADR-0005 point 4).
     public func earliestPastReset(in snapshot: UsageSnapshot, at now: Date) -> Date? {
         snapshot.limits.filter { state(of: $0, at: now) == .past }.map(\.resetsAt).min()
     }

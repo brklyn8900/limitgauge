@@ -76,7 +76,7 @@ import Testing
         ], fetchedAt: now)
         #expect(t.state(of: snap.limits[0], at: now) == .below(headroom: 1))
         #expect(t.state(of: snap.limits[1], at: now) == .past)
-        #expect(t.anyPast(in: snap, at: now))
+        #expect(t.earliestPastReset(in: snap, at: now) == later)
     }
 
     /// A limit whose window has reset since the fetch is unknown: not past, so off the dot.
@@ -86,6 +86,6 @@ import Testing
         let snap = UsageSnapshot(limits: [RateLimit(kind: .session, percent: 95, resetsAt: now.addingTimeInterval(-1))],
                                  fetchedAt: now.addingTimeInterval(-3600))
         #expect(t.state(of: snap.limits[0], at: now) == .reset)
-        #expect(!t.anyPast(in: snap, at: now))
+        #expect(t.earliestPastReset(in: snap, at: now) == nil)
     }
 }

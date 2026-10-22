@@ -46,7 +46,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateIcon() }
+            MainActor.assumeIsolated { self?.update() }
         }
         update()
     }
@@ -182,14 +182,15 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         item.button?.image = StatusIcon.image(for: Settings.icon)
         let now = Date()
         let thresholds = Settings.thresholds
-        let past = service.snapshot.map { thresholds.anyPast(in: $0, at: now) } ?? false
-        warningDot.isHidden = !(past && Settings.showsWarningDot)
+        let reset = service.snapshot.flatMap { thresholds.earliestPastReset(in: $0, at: now) }
+        warningDot.isHidden = !(reset != nil && Settings.showsWarningDot)
 
         dotTimer?.invalidate()
         dotTimer = nil
-        guard let reset = service.snapshot.flatMap({ thresholds.earliestPastReset(in: $0, at: now) }) else { return }
+        guard let reset else { return }
+        // update(), not updateIcon(): an open menu must stop showing the limit red with the dot.
         let timer = Timer(fire: reset, interval: 0, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateIcon() }
+            MainActor.assumeIsolated { self?.update() }
         }
         RunLoop.main.add(timer, forMode: .common)
         dotTimer = timer
