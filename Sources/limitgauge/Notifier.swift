@@ -4,8 +4,24 @@ import UserNotifications
 
 /// Posts limit warnings through Notification Center.
 @MainActor
-final class Notifier: WarningDelivery {
+final class Notifier: NSObject, WarningDelivery, UNUserNotificationCenterDelegate {
     private let center = UNUserNotificationCenter.current()
+
+    /// Created before launch finishes, as Notification Center requires of its delegate.
+    override init() {
+        super.init()
+        center.delegate = self
+    }
+
+    /// Without this, macOS silences a notification while limitgauge is the frontmost app, as
+    /// it is while Settings is open, yet `add` still succeeds and the warning counts as fired
+    /// (ADR-0005 point 2).
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        Log.app.info("notification presented while limitgauge is frontmost")
+        return [.banner, .sound]
+    }
 
     /// Asks for permission once. Notifications are on by default (proposal, Warnings). True
     /// if notifications are allowed.
