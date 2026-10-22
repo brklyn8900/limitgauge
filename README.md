@@ -8,6 +8,8 @@ It reads the account usage endpoint with the token Claude Code already keeps in 
 Keychain. Nothing to configure, nothing to paste, and it never writes credentials. Details in
 the [proposal](docs/proposal.md); decisions in the [ADRs](docs/adr/).
 
+limitgauge is unofficial and not affiliated with Anthropic.
+
 ## Install
 
 Requires macOS 26, Xcode 26 or its command line tools, and a Claude Code sign-in on this
