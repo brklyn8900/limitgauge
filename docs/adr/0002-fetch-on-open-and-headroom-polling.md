@@ -45,7 +45,9 @@ idle and too seldom when a five-hour window is being spent quickly.
 
 ## Consequences
 
-- The numbers are current when viewed, by construction. There is no staleness to explain.
+- The numbers are current when viewed, by construction, as long as the fetch succeeds. When
+  it fails, the menu keeps the last snapshot with the error and its age, and a limit whose
+  window has reset since shows as "Reset since the last update" (ADR-0005 point 4).
 - Request volume is a handful per hour at most, and lowest when it matters least. A failure
   never polls faster than success would. An expired token while Claude Code is idle costs
   one rejected request, then a Keychain read an hour and no requests. A refused Keychain read
