@@ -81,5 +81,18 @@ The [proposal](docs/proposal.md) is kept as written. These parts of it no longer
 - **The idle session row.** The proposal hides a row whose field is missing from the response.
   The endpoint drops the session limit while no five-hour window is open, so the menu shows
   **Current session** at 0% instead of hiding the row.
+- **Poll pacing.** The proposal leaves out a limit whose warning has fired. limitgauge leaves
+  out every limit at or past its threshold, warned or not, so a warning that could not be
+  delivered doesn't hold polling at 10 minutes. See
+  [ADR-0002](docs/adr/0002-fetch-on-open-and-headroom-polling.md).
+- **The warning key.** The proposal keys a warning on the limit and its `resets_at`. The
+  endpoint shifts `resets_at` by under a second between fetches, so the key rounds it to the
+  nearest minute. See [ADR-0005](docs/adr/0005-warnings-counted-on-delivery.md).
+- **When a warning counts.** A warning counts as sent once it is delivered, not when it is
+  due. One that can't be delivered, because notifications are off or not allowed, goes out
+  once they are on, if its window is still open. See
+  [ADR-0005](docs/adr/0005-warnings-counted-on-delivery.md).
+- **Test fixtures.** The proposal calls for a redacted real response. The fixtures are
+  synthetic, in the real response's shape, so no account's usage is in the repository.
 - **The Anthropic mark.** It is not one of the icon choices. It was dropped on trademark
   grounds.
