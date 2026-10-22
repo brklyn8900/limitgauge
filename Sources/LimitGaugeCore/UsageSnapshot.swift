@@ -111,6 +111,9 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
     public var usageCredits: UsageCredits?
     public var limitResets: LimitResets?
     public var weeklyBreakdown: [BreakdownRow]?
+    /// The raw kind of each `limits[]` element dropped as unreadable, "" where the kind itself
+    /// was unreadable. Nil when none was dropped, and in snapshots saved before this existed.
+    public var unreadableLimitKinds: [String]?
     public var fetchedAt: Date
 
     public init(
@@ -119,6 +122,7 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
         usageCredits: UsageCredits? = nil,
         limitResets: LimitResets? = nil,
         weeklyBreakdown: [BreakdownRow]? = nil,
+        unreadableLimitKinds: [String]? = nil,
         fetchedAt: Date
     ) {
         self.limits = limits
@@ -126,11 +130,19 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
         self.usageCredits = usageCredits
         self.limitResets = limitResets
         self.weeklyBreakdown = weeklyBreakdown
+        self.unreadableLimitKinds = unreadableLimitKinds
         self.fetchedAt = fetchedAt
     }
 
     public func limit(_ kind: RateLimit.Kind) -> RateLimit? {
         limits.first { $0.kind == kind }
+    }
+
+    /// The endpoint drops the session limit while no five-hour window is open, so the menu
+    /// shows the session at 0%. Not when a session element was there but unreadable: that
+    /// would be a confident 0% that never warns.
+    public var sessionIsIdle: Bool {
+        limit(.session) == nil && !(unreadableLimitKinds ?? []).contains("session")
     }
 }
 
@@ -174,15 +186,23 @@ public enum UsageDecoding {
         } catch {
             throw Error.malformedJSON(String(describing: error))
         }
-        guard let rawLimits = raw.limits?.value?.compactMap(\.value), !rawLimits.isEmpty else { throw Error.missingLimits }
+        guard let elements = raw.limits?.value, !elements.isEmpty else { throw Error.missingLimits }
 
-        let limits = rawLimits.compactMap { l -> RateLimit? in
-            guard let kind = l.kind, let percent = l.percent,
-                  let resetsAt = l.resets_at.flatMap(ISO8601.date) else { return nil }
+        var limits: [RateLimit] = []
+        var unreadable: [String] = []
+        for element in elements {
+            guard let l = element.limit, let kind = l.kind, let percent = l.percent,
+                  let resetsAt = l.resets_at.flatMap(ISO8601.date) else {
+                unreadable.append(element.kind ?? "")
+                continue
+            }
             let scopeName = l.scope?.model?.display_name ?? l.scope?.surface?.display_name
-            return RateLimit(kind: .init(rawKind: kind), percent: percent, resetsAt: resetsAt, scopeName: scopeName)
+            limits.append(RateLimit(kind: .init(rawKind: kind), percent: percent, resetsAt: resetsAt, scopeName: scopeName))
         }
         guard !limits.isEmpty else { throw Error.missingLimits }
+        if !unreadable.isEmpty {
+            Log.fetch.error("usage: dropped \(unreadable.count) of \(elements.count) limits[] elements as unreadable")
+        }
 
         let cloud = raw.iguana_necktie?.value.flatMap { c -> DollarAllowance? in
             guard let limit = c.limit_dollars, let remaining = c.remaining_dollars else { return nil }
@@ -212,7 +232,8 @@ public enum UsageDecoding {
         }
 
         return UsageSnapshot(limits: limits, cloudCredits: cloud, usageCredits: credits,
-                             limitResets: resets, weeklyBreakdown: breakdown, fetchedAt: fetchedAt)
+                             limitResets: resets, weeklyBreakdown: breakdown,
+                             unreadableLimitKinds: unreadable.isEmpty ? nil : unreadable, fetchedAt: fetchedAt)
     }
 
     public static func plan(from data: Data) throws -> Plan {
@@ -239,7 +260,7 @@ struct Lenient<T: Decodable>: Decodable {
 struct UsageResponse: Decodable {
     /// Outer: `limits` that is not an array counts as missing. Inner: one unreadable element
     /// (a fractional percent, a reshaped scope) drops only itself.
-    var limits: Lenient<[Lenient<RawLimit>]>?
+    var limits: Lenient<[RawLimitElement]>?
     var iguana_necktie: Lenient<RawDollarWindow>?
     var spend: Lenient<RawSpend>?
     var extra_usage: Lenient<RawExtraUsage>?
@@ -252,6 +273,19 @@ struct RawLimit: Decodable {
     var percent: Int?
     var resets_at: String?
     var scope: RawScope?
+}
+
+/// One `limits[]` element, read leniently. Its kind is read on its own, so an element that
+/// fails to decode still says which limit it was.
+struct RawLimitElement: Decodable {
+    private enum Keys: String, CodingKey { case kind }
+    let limit: RawLimit?
+    let kind: String?
+
+    init(from decoder: Decoder) {
+        limit = try? RawLimit(from: decoder)
+        kind = try? decoder.container(keyedBy: Keys.self).decode(String.self, forKey: .kind)
+    }
 }
 
 struct RawScope: Decodable {

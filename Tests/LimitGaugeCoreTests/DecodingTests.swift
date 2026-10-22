@@ -106,6 +106,46 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
         """.utf8)
         let snap = try UsageDecoding.snapshot(from: data)
         #expect(snap.limits.map(\.kind) == [.weeklyAll])
+        #expect(snap.unreadableLimitKinds == ["session", "weekly_scoped"])
+    }
+
+    /// An unreadable session element is not an idle session: inferring one would show a
+    /// confident 0% and never warn for that limit.
+    @Test func unreadableSessionIsNotIdle() throws {
+        let data = Data("""
+        {"limits": [{"kind": "session", "percent": 12.5, "resets_at": "2030-01-07T05:00:00+00:00"},
+                    {"kind": "weekly_all", "percent": 50, "resets_at": "2030-01-10T22:00:00+00:00"}]}
+        """.utf8)
+        #expect(try UsageDecoding.snapshot(from: data).sessionIsIdle == false)
+    }
+
+    /// The endpoint drops the session element while no five-hour window is open.
+    @Test func missingSessionIsIdle() throws {
+        let data = Data("""
+        {"limits": [{"kind": "weekly_all", "percent": 50, "resets_at": "2030-01-10T22:00:00+00:00"}]}
+        """.utf8)
+        let snap = try UsageDecoding.snapshot(from: data)
+        #expect(snap.sessionIsIdle)
+        #expect(snap.unreadableLimitKinds == nil)
+    }
+
+    /// An element that decodes but lacks a field, or has no readable kind, is dropped and
+    /// counted too.
+    @Test func incompleteElementsAreCounted() throws {
+        let data = Data("""
+        {"limits": [{"kind": "session", "percent": 12},
+                    {"kind": 3, "percent": 1, "resets_at": "2030-01-10T22:00:00+00:00"},
+                    {"kind": "weekly_all", "percent": 50, "resets_at": "2030-01-10T22:00:00+00:00"}]}
+        """.utf8)
+        let snap = try UsageDecoding.snapshot(from: data)
+        #expect(snap.unreadableLimitKinds == ["session", ""])
+        #expect(!snap.sessionIsIdle)
+    }
+
+    /// A snapshot saved before unreadable elements were recorded still loads.
+    @Test func snapshotSavedBeforeStillDecodes() throws {
+        let saved = Data(#"{"limits": [], "fetchedAt": 0}"#.utf8)
+        #expect(try JSONDecoder().decode(UsageSnapshot.self, from: saved).unreadableLimitKinds == nil)
     }
 
     @Test func limitsThatIsNotAnArrayIsMissing() {

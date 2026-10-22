@@ -120,8 +120,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         }
 
         if let snapshot = service.snapshot {
-            // The endpoint drops the session limit while no five-hour window is open.
-            if snapshot.limit(.session) == nil {
+            if snapshot.sessionIsIdle {
                 items.append(MenuRows.idleSession())
             }
             for limit in snapshot.limits {
