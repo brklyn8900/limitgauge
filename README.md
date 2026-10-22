@@ -45,7 +45,9 @@ the token in memory and never writes it to disk or to the log. It never refreshe
 either. When the token expires, the menu tells you to run `claude`, which gets a new one.
 
 The usage endpoint, `/api/oauth/usage`, is undocumented. Anthropic can change or remove it
-without notice, and limitgauge then shows an error instead of numbers.
+without notice. Depending on the change, limitgauge then shows an error instead of numbers, or
+a row goes missing from the menu with no error. See
+[ADR-0001](docs/adr/0001-usage-endpoint-with-claude-code-token.md).
 
 Opening the menu fetches when the last fetch attempt is more than two minutes old, and
 **Refresh** fetches at once. Between those, limitgauge polls in the background only to send
