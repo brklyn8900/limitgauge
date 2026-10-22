@@ -79,6 +79,10 @@ public final class UsageService {
     /// no read, so a Keychain dialog cannot come back on every poll; launch, menu open and
     /// Refresh still read. Cleared by any read that ends otherwise.
     private var refusedRead: UsageProblem?
+    /// The last refresh was a poll that sent no request: it ran no read, or read a rejected
+    /// token. It moved the poll clock but is no attempt the menu can be served from, so the
+    /// next launch or menu open fetches whatever its age.
+    private var lastPollSentNothing = false
 
     private let readToken: TokenReader
     private let fetcher: any UsageFetching
@@ -144,7 +148,7 @@ public final class UsageService {
     // MARK: Private
 
     /// The last attempt, successful or not. The cache and the scheduler both measure from it,
-    /// so a failure moves the clock.
+    /// so a failure moves the clock. The cache skips it after a poll that sent nothing.
     private var lastAttempt: Date? {
         failures?.lastAttempt ?? snapshot?.fetchedAt
     }
@@ -154,7 +158,7 @@ public final class UsageService {
         case .refreshRow, .poll:
             return true
         case .launch, .menuOpen:
-            guard let lastAttempt else { return true }
+            guard let lastAttempt, !lastPollSentNothing else { return true }
             return now().timeIntervalSince(lastAttempt) >= Self.staleAfter
         }
     }
@@ -190,10 +194,17 @@ public final class UsageService {
     /// snapshot and returns the token that succeeded, so the plan never goes out with a
     /// rejected one.
     private func fetchUsage(_ reason: RefreshReason) async throws(RefreshFailure) -> AccessToken {
-        if reason == .poll, let refusedRead { throw .readStillRefused(refusedRead) }
+        lastPollSentNothing = false
+        if reason == .poll, let refusedRead {
+            lastPollSentNothing = true
+            throw .readStillRefused(refusedRead)
+        }
         let token = try await read()
         // A poll exists only for warnings, and a rejected token cannot produce any.
-        if reason == .poll, token == rejectedToken { throw .tokenStillRejected }
+        if reason == .poll, token == rejectedToken {
+            lastPollSentNothing = true
+            throw .tokenStillRejected
+        }
         do {
             snapshot = try await fetcher.fetchUsage(token: token)
             return token

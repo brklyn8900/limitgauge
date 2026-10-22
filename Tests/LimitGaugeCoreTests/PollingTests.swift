@@ -165,4 +165,40 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         _ = await rig.service.refresh(.poll).value
         #expect(reads.withLock { $0 } == 3)
     }
+
+    /// A poll that ran no read is not an attempt the menu can be served from: the first menu
+    /// open after it reads, even within two minutes.
+    @Test func menuOpenSoonAfterAPollThatRanNoReadReads() async {
+        let clock = TestClock(t0)
+        let reads = Mutex(0)
+        let rig = Rig(readToken: { () async throws(CredentialError) -> AccessToken in
+            reads.withLock { $0 += 1 }
+            throw .refused(exitCode: 51)
+        }, clock: clock)
+        _ = await rig.service.refresh(.poll).value
+        clock.advance(3600)
+        _ = await rig.service.refresh(.poll).value
+        #expect(reads.withLock { $0 } == 1)
+        clock.advance(30)
+        #expect(await rig.service.refresh(.menuOpen).value == .failed(.keychainDenied))
+        #expect(reads.withLock { $0 } == 2)
+        // That read was a real attempt, so the cache holds from it again.
+        clock.advance(30)
+        #expect(await rig.service.refresh(.menuOpen).value == .skipped)
+        // The poll clock still moved: the skipped poll was an attempt for the scheduler.
+        #expect(rig.service.nextPoll == t0.addingTimeInterval(3600 + 30 + 3600))
+    }
+
+    /// Likewise for a poll that read a rejected token and sent nothing.
+    @Test func menuOpenSoonAfterAPollThatSentNoRequestSends() async {
+        let clock = TestClock(t0)
+        let rig = Rig(usage: [.failure(.unauthorized), .failure(.unauthorized)], readToken: reading("dead"), clock: clock)
+        _ = await rig.service.refresh(.poll).value
+        clock.advance(3600)
+        _ = await rig.service.refresh(.poll).value
+        #expect(rig.fetcher.usageTokens == ["dead"])
+        clock.advance(30)
+        #expect(await rig.service.refresh(.menuOpen).value == .failed(.tokenRejected))
+        #expect(rig.fetcher.usageTokens == ["dead", "dead"])
+    }
 }
