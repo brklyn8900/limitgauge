@@ -88,7 +88,7 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
         let missing = Rig(readToken: failing(.notFound))
         #expect(await missing.service.refresh(.refreshRow).value == .failed(.noCredentials))
         let denied = Rig(readToken: failing(.refused(exitCode: 36)))
-        #expect(await denied.service.refresh(.refreshRow).value == .failed(.keychainDenied))
+        #expect(await denied.service.refresh(.refreshRow).value == .failed(.keychainLocked))
         #expect(denied.fetcher.usageTokens.isEmpty)
     }
 

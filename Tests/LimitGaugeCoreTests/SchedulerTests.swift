@@ -82,7 +82,9 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         #expect(UsageProblem.server(429).retry == .rateLimited)
         #expect(UsageProblem.server(503).retry == .transient)
         #expect(UsageProblem.offline.retry == .transient)
-        #expect(UsageProblem.keychainDenied.retry == .transient)
+        #expect(UsageProblem.keychainLocked.retry == .needsUser)
+        #expect(UsageProblem.keychainDenied.retry == .needsUser)
+        #expect(UsageProblem.keychainTimedOut.retry == .needsUser)
         #expect(UsageProblem.tokenRejected.retry == .needsUser)
         #expect(UsageProblem.noCredentials.retry == .needsUser)
     }

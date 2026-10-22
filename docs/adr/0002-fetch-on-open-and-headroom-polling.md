@@ -28,11 +28,13 @@ idle and too seldom when a five-hour window is being spent quickly.
    left to warn about until its window resets, so it leaves the pacing; the next poll comes
    one minute after that reset if that is sooner.
 3. **After a failed fetch, polls back off**, never sooner than the last snapshot's own pace.
-   No network, a 5xx, an unreadable response or a locked Keychain: 10 minutes after the first
-   failure, doubling up to 60. A 429: 30 minutes, then 60. Failures only the user can fix (no
-   credentials, a rejected token, an unreadable Keychain item, a failing `security` tool): 60
-   minutes. A poll does not resend a token the endpoint has rejected; opening the menu or
-   Refresh does. The first success returns to headroom pacing.
+   No network, a 5xx or an unreadable response: 10 minutes after the first failure, doubling
+   up to 60. A 429: 30 minutes, then 60. Failures only the user can fix (no credentials, a
+   rejected token, a locked, refused or timed-out Keychain read, an unreadable Keychain item, a
+   failing `security` tool): 60 minutes. A poll does not resend a token the endpoint has
+   rejected, and does not run a Keychain read again after one was refused or timed out, so a
+   Keychain dialog cannot return on every poll; opening the menu or Refresh does both. The
+   first success returns to headroom pacing.
 4. Any fetch attempt restarts the clock, so a user who opens the menu often pays for no extra
    polls.
 5. No timer fires while the Mac sleeps. On wake the timer is re-armed for the same time, so
@@ -46,7 +48,8 @@ idle and too seldom when a five-hour window is being spent quickly.
 - The numbers are current when viewed, by construction. There is no staleness to explain.
 - Request volume is a handful per hour at most, and lowest when it matters least. A failure
   never polls faster than success would. An expired token while Claude Code is idle costs
-  one rejected request, then a Keychain read an hour and no requests.
+  one rejected request, then a Keychain read an hour and no requests. A refused Keychain read
+  costs one read, then nothing until the user opens the menu.
 - A warning can arrive up to one poll interval after the threshold was actually crossed. With
   the 10-minute step near the threshold this is accepted.
 - The scheduler is a pure function of the snapshot, the run of consecutive failures and the

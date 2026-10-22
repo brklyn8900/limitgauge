@@ -57,9 +57,10 @@ warnings. The limit closest to its warning threshold sets the next poll:
 
 A limit already past its threshold doesn't count. limitgauge polls one minute after that limit
 resets, if that comes sooner. Any fetch restarts the clock, so opening the menu often adds no
-polls. After a failed fetch, polls back off. A network error, a server error, or a locked
-Keychain waits 10 minutes, then doubles up to 60. A rate limit waits 30 minutes, then 60. A
-failure only you can fix, such as a missing sign-in, waits 60 minutes.
+polls. After a failed fetch, polls back off. A network error or a server error waits 10
+minutes, then doubles up to 60. A rate limit waits 30 minutes, then 60. A failure only you can
+fix, such as a missing sign-in, waits 60 minutes. After a locked, refused or unanswered Keychain
+read, polls stop reading the Keychain until you open the menu or press **Refresh**.
 [ADR-0002](docs/adr/0002-fetch-on-open-and-headroom-polling.md) has the full rules.
 
 ## Develop

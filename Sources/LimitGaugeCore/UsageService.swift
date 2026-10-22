@@ -75,6 +75,10 @@ public final class UsageService {
     /// The token the endpoint last rejected, in memory only. A poll that reads it again sends
     /// nothing; launch, menu open and Refresh still send it. Cleared by any success.
     private var rejectedToken: AccessToken?
+    /// The problem of the last Keychain read, if it was refused or timed out. A poll then runs
+    /// no read, so a Keychain dialog cannot come back on every poll; launch, menu open and
+    /// Refresh still read. Cleared by any read that ends otherwise.
+    private var refusedRead: UsageProblem?
 
     private let readToken: TokenReader
     private let fetcher: any UsageFetching
@@ -186,12 +190,8 @@ public final class UsageService {
     /// snapshot and returns the token that succeeded, so the plan never goes out with a
     /// rejected one.
     private func fetchUsage(_ reason: RefreshReason) async throws(RefreshFailure) -> AccessToken {
-        let token: AccessToken
-        do {
-            token = try await readToken()
-        } catch {
-            throw RefreshFailure(error)
-        }
+        if reason == .poll, let refusedRead { throw .readStillRefused(refusedRead) }
+        let token = try await read()
         // A poll exists only for warnings, and a rejected token cannot produce any.
         if reason == .poll, token == rejectedToken { throw .tokenStillRejected }
         do {
@@ -199,12 +199,7 @@ public final class UsageService {
             return token
         } catch .unauthorized {
             // Claude Code may have rotated the token since the read. One re-read, one retry.
-            let fresh: AccessToken
-            do {
-                fresh = try await readToken()
-            } catch {
-                throw RefreshFailure(error)
-            }
+            let fresh = try await read()
             guard fresh != token else {
                 rejectedToken = token
                 throw .tokenUnchanged
@@ -220,6 +215,22 @@ public final class UsageService {
             }
         } catch {
             throw RefreshFailure(error)
+        }
+    }
+
+    /// Reads the token, and remembers a refused or timed-out read for the next poll.
+    private func read() async throws(RefreshFailure) -> AccessToken {
+        do {
+            let token = try await readToken()
+            refusedRead = nil
+            return token
+        } catch {
+            let failure = RefreshFailure(error)
+            switch error {
+            case .refused, .timedOut: refusedRead = failure.problem
+            case .notFound, .failed, .launchFailed, .malformed: refusedRead = nil
+            }
+            throw failure
         }
     }
 

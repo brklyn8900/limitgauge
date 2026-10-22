@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import LimitGaugeCore
 
@@ -93,5 +94,43 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         clock.advance(121)
         #expect(await rig.service.refresh(.menuOpen).value == .failed(.tokenRejected))
         #expect(rig.fetcher.usageTokens == ["dead", "dead"])
+    }
+
+    /// A refused or timed-out Keychain read needs the user, like a rejected token: polls do not
+    /// run the security tool again, so a dialog cannot come back on every poll. Menu open still
+    /// reads.
+    @Test(arguments: [CredentialError.refused(exitCode: 36), .refused(exitCode: 51), .refused(exitCode: 128), .timedOut])
+    func pollDoesNotRerunARefusedRead(error: CredentialError) async {
+        let clock = TestClock(t0)
+        let reads = Mutex(0)
+        let rig = Rig(readToken: { () async throws(CredentialError) -> AccessToken in
+            reads.withLock { $0 += 1 }
+            throw error
+        }, clock: clock)
+        let problem = RefreshFailure(error).problem
+        #expect(await rig.service.refresh(.poll).value == .failed(problem))
+        #expect(rig.service.nextPoll == t0.addingTimeInterval(60 * 60))
+        clock.advance(3600)
+        #expect(await rig.service.refresh(.poll).value == .failed(problem))
+        #expect(reads.withLock { $0 } == 1)
+        clock.advance(121)
+        #expect(await rig.service.refresh(.menuOpen).value == .failed(problem))
+        #expect(reads.withLock { $0 } == 2)
+    }
+
+    /// A read that works again lets polls read again.
+    @Test func successAfterARefusalLetsPollsReadAgain() async {
+        let clock = TestClock(t0)
+        let reads = Mutex(0)
+        let rig = Rig(usage: [.success(snapshot(at: t0)), .success(snapshot(at: t0))],
+                      readToken: { () async throws(CredentialError) -> AccessToken in
+            if reads.withLock({ $0 += 1; return $0 }) == 1 { throw .refused(exitCode: 51) }
+            return AccessToken("a")
+        }, clock: clock)
+        _ = await rig.service.refresh(.poll).value
+        #expect(await rig.service.refresh(.refreshRow).value == .fetched)
+        clock.advance(3600)
+        #expect(await rig.service.refresh(.poll).value == .fetched)
+        #expect(reads.withLock { $0 } == 3)
     }
 }

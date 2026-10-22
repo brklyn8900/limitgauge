@@ -32,13 +32,15 @@ after a refresh. Verified on this machine: exit 0 in 25 ms, no prompt.
    is `notFound`; 36 (interaction not allowed), 51 (authorization failed) and 128 (user
    cancelled) are `refused`; any other code is `failed`, with the code. A tool that cannot be
    launched is `launchFailed`, and an item without an access token is `malformed`. Each has
-   its own message: sign in with Claude Code, unlock the keychain, the security tool failed,
-   or the item's format is not recognised. Only a missing item tells the user to sign in.
+   its own message: sign in with Claude Code, unlock the keychain (36), access was denied
+   (51, 128), the read did not finish in time, the security tool failed, or the item's format
+   is not recognised. Only a missing item tells the user to sign in.
 3. The read is asynchronous and runs off the main actor. Its five-second deadline runs on its
    own clock, independent of the tool's output, so it fires even while the tool is blocked.
    At the deadline the tool is sent SIGTERM, then SIGKILL a second later if it is still
-   running, and the read is reported as `timedOut`, shown like a refusal. A stuck Keychain
-   dialog cannot hang the service or the menu.
+   running, and the read is reported as `timedOut`. A stuck Keychain dialog cannot hang the
+   service or the menu. Like a refusal, a timeout stops background polls from reading again
+   until the user opens the menu or presses Refresh (ADR-0002 point 3).
 4. Everything else in ADR-0001 stands: read-only, no refresh, one re-read on 401.
 5. The `claude setup-token` fallback from the proposal is not built. Its only purpose was
    escaping the dialog, and this removes the dialog.

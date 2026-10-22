@@ -99,13 +99,22 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
 @Suite struct CredentialMappingTests {
     @Test(arguments: [
         (CredentialError.notFound, UsageProblem.noCredentials),
-        (.refused(exitCode: 36), .keychainDenied), (.refused(exitCode: 51), .keychainDenied),
-        (.refused(exitCode: 128), .keychainDenied), (.timedOut, .keychainDenied),
+        (.refused(exitCode: 36), .keychainLocked), (.refused(exitCode: 51), .keychainDenied),
+        (.refused(exitCode: 128), .keychainDenied), (.timedOut, .keychainTimedOut),
         (.failed(exitCode: 7), .keychainToolFailed), (.launchFailed, .keychainToolFailed),
         (.malformed, .credentialsUnreadable),
     ])
     func eachFailureHasItsProblem(error: CredentialError, problem: UsageProblem) {
         #expect(RefreshFailure(error).problem == problem)
+    }
+
+    /// Exit 51 and 128 mean the read was refused, so the message says access was denied
+    /// instead of asking the user to unlock a keychain that is already unlocked.
+    @Test func deniedSaysDeniedNotLocked() {
+        let denied = UsageProblem.keychainDenied.message
+        #expect(denied.localizedCaseInsensitiveContains("denied"))
+        #expect(!denied.localizedCaseInsensitiveContains("unlock"))
+        #expect(Set([UsageProblem.keychainLocked, .keychainDenied, .keychainTimedOut].map(\.message)).count == 3)
     }
 
     /// The log line names the cause with its code and nothing else.
@@ -128,6 +137,6 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
             throw .refused(exitCode: 36)
         })
         _ = await rig.service.refresh(.refreshRow).value
-        #expect(rig.service.problem == .keychainDenied)
+        #expect(rig.service.problem == .keychainLocked)
     }
 }
