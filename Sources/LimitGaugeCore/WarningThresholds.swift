@@ -40,7 +40,6 @@ public struct WarningThresholds: Equatable, Sendable, Codable {
     }
 }
 
-/// Where a limit stands, at a given moment, against its threshold.
 public enum LimitState: Equatable, Sendable {
     /// Below its threshold by this many points (more than zero).
     case below(headroom: Int)

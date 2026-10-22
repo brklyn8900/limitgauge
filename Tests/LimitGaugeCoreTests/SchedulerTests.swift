@@ -19,7 +19,7 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
 }
 
 @Suite struct PollSchedulerTests {
-    let t = WarningThresholds.default // 80 / 85 / 80
+    let t = WarningThresholds.default
 
     @Test func intervalBands() {
         #expect(PollScheduler.interval(for: 41) == 60 * 60)
@@ -30,7 +30,6 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
     }
 
     @Test func leastHeadroomAmongLimitsBelowThreshold() {
-        // Headrooms 50, 15, 40: the week picks 30 min.
         #expect(PollScheduler.nextPoll(snapshot: snap(session: 30, week: 70, fable: 40), failures: nil, thresholds: t) == now + 30 * 60)
         #expect(PollScheduler.nextPoll(snapshot: snap(session: 10, week: 20, fable: 10), failures: nil, thresholds: t) == now + 60 * 60)
         #expect(PollScheduler.nextPoll(snapshot: snap(session: 70, week: 20, fable: 10), failures: nil, thresholds: t) == now + 10 * 60)
@@ -46,7 +45,6 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         #expect(PollScheduler.nextPoll(snapshot: s, failures: nil, thresholds: t) == now + 60 * 60)
     }
 
-    /// One look a minute after a past limit's window resets, if that is sooner than the pace.
     @Test func pastLimitsResetPullsThePollIn() {
         let s = UsageSnapshot(limits: [RateLimit(kind: .session, percent: 90, resetsAt: now + 20 * 60)], fetchedAt: now)
         #expect(PollScheduler.nextPoll(snapshot: s, failures: nil, thresholds: t) == now + 21 * 60)
@@ -60,13 +58,11 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         #expect(PollScheduler.nextPoll(snapshot: nil, failures: streak(1, at: now), thresholds: t) == now + 10 * 60)
     }
 
-    /// A stale snapshot's pace is in the past; the backoff from the attempt decides.
     @Test func failureWithStaleSnapshotBacksOffFromTheAttempt() {
         let old = snap(session: 70, week: 20, fable: 10, fetchedAt: now - 3 * 3600)
         #expect(PollScheduler.nextPoll(snapshot: old, failures: streak(1, at: now), thresholds: t) == now + 10 * 60)
     }
 
-    /// Far from every threshold, a fresh snapshot's hourly pace wins over the 10-minute retry.
     @Test func failureNeverPollsFasterThanSuccess() {
         let fresh = snap(session: 10, week: 20, fable: 10)
         #expect(PollScheduler.nextPoll(snapshot: fresh, failures: streak(1, at: now + 60), thresholds: t) == now + 60 * 60)
@@ -89,8 +85,6 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         #expect(UsageProblem.noCredentials.retry == .needsUser)
     }
 
-    /// The loop guard as a property: no input yields a due time within a minute of the last
-    /// attempt.
     @Test func neverWithinAMinuteOfTheLastAttempt() {
         let problems: [UsageProblem] = [.offline, .server(429), .server(503), .tokenRejected, .keychainDenied]
         for session in stride(from: 0, through: 100, by: 5) {
@@ -109,7 +103,6 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
 @Suite struct WarningTrackerTests {
     let t = WarningThresholds.default
 
-    /// Due until delivered; the caller marks it fired, and then it is due no more.
     @Test func firesOncePerWindow() {
         let s = snap(session: 85, week: 20, fable: 10)
         let first = WarningTracker.evaluate(snapshot: s, thresholds: t, fired: [], at: now)
@@ -131,7 +124,6 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         next.limits[0].percent = 82
         let second = WarningTracker.evaluate(snapshot: next, thresholds: t, fired: delivered, at: now)
         #expect(second.due.map(\.kind) == [.session])
-        // The old window's key is gone.
         #expect(second.fired.isEmpty)
     }
 
@@ -146,7 +138,6 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         #expect(out.due.count == 3)
     }
 
-    /// A limit whose window has reset since the fetch is unknown and never due.
     @Test func limitPastItsResetIsNotDue() {
         let s = snap(session: 90, week: 20, fable: 10)
         let out = WarningTracker.evaluate(snapshot: s, thresholds: t, fired: [], at: sessionReset.addingTimeInterval(1))
@@ -177,8 +168,6 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
         #expect(a != b)
     }
 
-    /// Keys saved before rounding existed decode rounded, so the upgrade does not repeat a
-    /// warning already posted in the current window.
     @Test func keysPersistedBeforeRoundingDecodeRounded() throws {
         let raw = try #require(ISO8601.date("2026-10-21T21:10:00.462+00:00"))
         let json = try JSONEncoder().encode(LegacyKey(kind: "session", resetsAt: raw))
@@ -188,7 +177,6 @@ private func streak(_ count: Int, at date: Date, _ problem: UsageProblem = .offl
     }
 }
 
-/// A key as the synthesized encoder wrote it before rounding.
 private struct LegacyKey: Encodable {
     var kind: String
     var resetsAt: Date

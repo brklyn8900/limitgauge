@@ -2,7 +2,6 @@ import Foundation
 import Synchronization
 @testable import LimitGaugeCore
 
-/// Scripted fetcher: each call pops the next result for its endpoint.
 final class ScriptedFetcher: UsageFetching, @unchecked Sendable {
     var usageResults: [Result<UsageSnapshot, UsageAPI.Error>]
     var planResults: [Result<Plan, UsageAPI.Error>]
@@ -32,7 +31,6 @@ final class ScriptedFetcher: UsageFetching, @unchecked Sendable {
     }
 }
 
-/// Records every warning offered; accepts or declines as told.
 @MainActor
 final class RecordingDelivery: WarningDelivery {
     var accepting: Bool
@@ -50,7 +48,6 @@ final class RecordingDelivery: WarningDelivery {
     }
 }
 
-/// A settable clock for the service's `now`.
 final class TestClock: Sendable {
     private let time: Mutex<Date>
     init(_ start: Date) { time = Mutex(start) }
@@ -75,7 +72,6 @@ func failing(_ error: CredentialError) -> TokenReader {
     { () async throws(CredentialError) -> AccessToken in throw error }
 }
 
-/// A service over a throwaway UserDefaults domain, removed when the rig goes away.
 @MainActor
 final class Rig {
     let store: SnapshotStore

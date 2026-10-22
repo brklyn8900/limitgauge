@@ -21,7 +21,6 @@ import Testing
     // 2026-10-18 10:00 UTC, a Sunday.
     let sunday = Date(timeIntervalSince1970: 1_792_317_600)
 
-    /// A Gregorian calendar carrying the locale and time zone the text is formatted in.
     func pinned(_ zone: String) -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "en_US")
@@ -79,7 +78,6 @@ import Testing
         #expect(t.earliestPastReset(in: snap, at: now) == later)
     }
 
-    /// A limit whose window has reset since the fetch is unknown: not past, so off the dot.
     @Test func resetLimitIsUnknownAndLeavesTheDot() {
         let t = WarningThresholds.default
         let now = Date()

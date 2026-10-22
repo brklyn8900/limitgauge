@@ -9,7 +9,6 @@ private func snapshot(percent: Int) -> UsageSnapshot {
                   fetchedAt: t0)
 }
 
-/// Holds every delivery until released, to catch a warning offered twice while in flight.
 @MainActor
 final class GatedDelivery: WarningDelivery {
     private(set) var offered: [RateLimit] = []
@@ -46,7 +45,6 @@ final class GatedDelivery: WarningDelivery {
         #expect(delivery.offered.count == 2)
     }
 
-    /// A delivery that never answers must not hold the refresh, or polling stops.
     @Test func hungDeliveryIsAbandonedAtTheDeadline() async throws {
         let delivery = GatedDelivery()
         let rig = Rig(usage: [.success(snapshot(percent: 90))], delivery: delivery)
@@ -78,7 +76,6 @@ final class GatedDelivery: WarningDelivery {
         #expect(delivery.identifiers == [WarningKey(RateLimit(kind: .weeklyScoped, percent: 83, resetsAt: b, scopeName: "Fable")).notificationIdentifier])
     }
 
-    /// A settings change while the refresh's delivery is pending must not post it again.
     @Test func warningBeingDeliveredIsNotOfferedTwice() async {
         let delivery = GatedDelivery()
         let rig = Rig(usage: [.success(snapshot(percent: 90))], delivery: delivery)

@@ -1,7 +1,6 @@
 import AppKit
 import LimitGaugeCore
 
-/// Custom menu rows. Each is a non-interactive view sized to a fixed menu width.
 @MainActor
 enum MenuRows {
     static let width: CGFloat = 300
@@ -19,8 +18,6 @@ enum MenuRows {
         }
     }
 
-    /// The session row when the endpoint reports no session: no five-hour window is open,
-    /// so usage is zero and there is nothing to reset.
     static func idleSession() -> NSMenuItem {
         gauge(title: RateLimit.Kind.session.title, percent: 0, caption: nil, past: false)
     }
@@ -48,7 +45,6 @@ enum MenuRows {
         return item(stack(rows, spacing: 5))
     }
 
-    /// Left label, right value, optional caption below. A quiet row greys the label too.
     static func keyValue(_ key: String, _ value: String, detail: String? = nil, quiet: Bool = false) -> NSMenuItem {
         let k = label(key, font: .systemFont(ofSize: 13))
         if quiet { k.textColor = .secondaryLabelColor }
@@ -68,7 +64,6 @@ enum MenuRows {
         return item(stack(rows, spacing: 2))
     }
 
-    /// Weekly usage by surface, one line each.
     static func breakdown(_ rows: [BreakdownRow]) -> NSMenuItem {
         let heading = label("This week by surface", font: .systemFont(ofSize: 11, weight: .medium))
         heading.textColor = .secondaryLabelColor
@@ -85,7 +80,6 @@ enum MenuRows {
         return item(stack(views, spacing: 3))
     }
 
-    /// A wrapped sentence, for problems.
     static func message(_ text: String) -> NSMenuItem {
         let l = label(text, font: .systemFont(ofSize: 12))
         l.textColor = .secondaryLabelColor
@@ -102,8 +96,6 @@ enum MenuRows {
         view.frame = NSRect(x: 0, y: 0, width: width, height: 22)
         return view
     }
-
-    // MARK: Building blocks
 
     private static func label(_ text: String, font: NSFont) -> NSTextField {
         let l = NSTextField(labelWithString: text)
@@ -145,7 +137,6 @@ enum MenuRows {
     }
 }
 
-/// A menu row that acts on click without closing the menu.
 final class ActionRowView: NSView {
     private let handler: () -> Void
     private let enabled: Bool
@@ -190,7 +181,6 @@ final class ActionRowView: NSView {
     }
 }
 
-/// A thin rounded progress bar.
 final class BarView: NSView {
     private let fraction: Double
     private let warning: Bool

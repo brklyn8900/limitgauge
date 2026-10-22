@@ -1,7 +1,6 @@
 import AppKit
 
 enum StatusIcon {
-    /// Template image for the status item.
     static func image(for icon: Settings.Icon) -> NSImage? {
         let image = symbol(icon.rawValue)
         image?.isTemplate = true

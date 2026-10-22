@@ -4,7 +4,6 @@ import Foundation
 /// abandoned, not awaited: a task group would wait for a child stuck in a call that never
 /// returns, which is the hang this exists to prevent.
 enum Deadline {
-    /// `work`'s value, or nil if `timeout` passed first.
     static func race<T: Sendable>(_ timeout: Duration, _ work: @escaping @Sendable () async -> T) async -> T? {
         let once = ResumeOnce<T?>()
         return await withCheckedContinuation { continuation in

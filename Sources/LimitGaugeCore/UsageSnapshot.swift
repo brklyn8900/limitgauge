@@ -1,6 +1,5 @@
 import Foundation
 
-/// One rate limit as reported by the usage endpoint.
 public struct RateLimit: Equatable, Sendable, Codable {
     public enum Kind: Equatable, Sendable, Codable {
         case session
@@ -146,7 +145,6 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
     }
 }
 
-/// The plan, from the profile endpoint.
 public struct Plan: Equatable, Sendable, Codable {
     public var rateLimitTier: String
 
@@ -162,15 +160,12 @@ public struct Plan: Equatable, Sendable, Codable {
             break
         }
         let words = tier.split(separator: "_").map { word -> String in
-            // Keep multipliers like "5x" as they are; capitalize plain words.
             if word.last == "x", word.dropLast().allSatisfy(\.isNumber) { return String(word) }
             return word.prefix(1).uppercased() + word.dropFirst()
         }
         return words.isEmpty ? rateLimitTier : words.joined(separator: " ")
     }
 }
-
-// MARK: - Decoding
 
 public enum UsageDecoding {
     public enum Error: Swift.Error, Equatable {
@@ -250,7 +245,6 @@ public enum UsageDecoding {
     }
 }
 
-/// Decodes to nil instead of failing when the value has an unexpected shape.
 struct Lenient<T: Decodable>: Decodable {
     let value: T?
     init(from decoder: Decoder) {
@@ -258,7 +252,6 @@ struct Lenient<T: Decodable>: Decodable {
     }
 }
 
-// Wire shapes. Field names mirror the endpoint, hence the snake_case.
 struct UsageResponse: Decodable {
     /// Outer: `limits` that is not an array counts as missing. Inner: one unreadable element
     /// (a fractional percent, a reshaped scope) drops only itself.

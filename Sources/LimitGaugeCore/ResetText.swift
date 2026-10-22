@@ -34,7 +34,6 @@ public enum ResetText {
         return "\(mins)m"
     }
 
-    /// Clock time, with the weekday when the reset is not today.
     static func clock(_ date: Date, now: Date, calendar: Calendar) -> String {
         let time = date.formatted(style(calendar).hour().minute())
         if calendar.isDate(date, inSameDayAs: now) { return time }

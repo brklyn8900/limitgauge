@@ -23,7 +23,6 @@ final class Poller {
         }
     }
 
-    /// Arms the timer for `due`; nil disarms. An unchanged due time is a no-op.
     func schedule(at due: Date?) {
         guard due != self.due else { return }
         timer?.invalidate()

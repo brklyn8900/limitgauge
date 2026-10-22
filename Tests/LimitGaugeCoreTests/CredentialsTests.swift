@@ -3,13 +3,11 @@ import Synchronization
 import Testing
 @testable import LimitGaugeCore
 
-/// A stand-in for `/usr/bin/security`: a shell script with the same contract (stdout, exit code).
 private func standIn(_ script: String, timeout: Duration = .seconds(5)) -> ClaudeCodeCredentials {
     ClaudeCodeCredentials(command: .init(tool: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", script]),
                           timeout: timeout)
 }
 
-/// The service's token source over a reader.
 private func reading(_ reader: ClaudeCodeCredentials) -> TokenReader {
     { () async throws(CredentialError) -> AccessToken in try await reader.read() }
 }
@@ -87,7 +85,6 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
 
 @MainActor
 @Suite struct CredentialReadIsolationTests {
-    /// A slow Keychain read must not block the main actor: the menu stays responsive.
     @Test func readLeavesTheMainActorFree() async throws {
         let reader = standIn("/bin/sleep 2; printf '%s' '\(item)'")
         let rig = Rig(readToken: reading(reader))
@@ -137,8 +134,6 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         #expect(RefreshFailure(error).problem == problem)
     }
 
-    /// Exit 51 and 128 mean the read was refused, so the message says access was denied
-    /// instead of asking the user to unlock a keychain that is already unlocked.
     @Test func deniedSaysDeniedNotLocked() {
         let denied = UsageProblem.keychainDenied.message
         #expect(denied.localizedCaseInsensitiveContains("denied"))
@@ -146,15 +141,12 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
         #expect(Set([UsageProblem.keychainLocked, .keychainDenied, .keychainTimedOut].map(\.message)).count == 3)
     }
 
-    /// The README tells users to choose Deny, so the message must not send them to Refresh,
-    /// which brings the same dialog back. It points to the README's Keychain note instead.
     @Test func deniedDoesNotSendTheUserToRefresh() {
         let denied = UsageProblem.keychainDenied.message
         #expect(!denied.localizedCaseInsensitiveContains("refresh"))
         #expect(denied.contains("README"))
     }
 
-    /// The log line names the cause with its code and nothing else.
     @Test func logLinesCarryTheExitCode() {
         #expect(RefreshFailure(CredentialError.refused(exitCode: 51)).logDescription == "security: refused (exit 51)")
         #expect(RefreshFailure(CredentialError.failed(exitCode: 7)).logDescription == "security: exit 7")
@@ -166,7 +158,6 @@ private let item = #"{"claudeAiOauth": {"accessToken": "sk-ant-oat01-test"}}"#
 
 @MainActor
 @Suite struct RereadTests {
-    /// A re-read after a 401 that fails reports its own problem, not a rejected token.
     @Test func failedRereadReportsItsOwnProblem() async {
         let reads = Mutex(0)
         let rig = Rig(usage: [.failure(.unauthorized)], readToken: { () async throws(CredentialError) -> AccessToken in

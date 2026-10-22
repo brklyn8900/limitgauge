@@ -21,7 +21,6 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
         #expect(rig.fetcher.planTokens == ["a"])
     }
 
-    /// Effects are complete when the outcome arrives, and they persist.
     @Test func fetchedSnapshotIsStoredBeforeTheOutcome() async {
         let rig = Rig(usage: [.success(snapshot(at: t0))], plan: [.success(Plan(rateLimitTier: "x"))])
         #expect(await rig.service.refresh(.launch).value == .fetched)
@@ -42,7 +41,6 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
         #expect(rig.service.snapshot?.fetchedAt == t0)
     }
 
-    /// A skipped launch still tells the app, so the timer is armed from the persisted snapshot.
     @Test func skippedLaunchStillNotifies() async {
         let rig = Rig(seed: snapshot(at: t0.addingTimeInterval(-30)))
         var changes = 0
@@ -59,7 +57,6 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
         #expect(rig.service.problem == nil)
     }
 
-    /// The plan must go out with the token that worked, not the one the endpoint rejected.
     @Test func planIsFetchedWithTheRereadToken() async {
         let tokens = Tokens(["old", "new"])
         let rig = Rig(usage: [.failure(.unauthorized), .success(snapshot(at: t0))],
@@ -117,7 +114,6 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
         #expect(rig.fetcher.usageTokens.count == 1)
     }
 
-    /// A refresh tells the app twice: once when it starts, once when it is done.
     @Test func aRefreshNotifiesAtStartAndEnd() async {
         let rig = Rig(usage: [.success(snapshot(at: t0))])
         var refreshing: [Bool] = []
@@ -126,7 +122,6 @@ private func snapshot(at date: Date, percent: Int = 10, resetsAt: Date? = nil) -
         #expect(refreshing == [true, false])
     }
 
-    /// A warning is posted once per window, and the record of it survives a relaunch.
     @Test func warningIsPostedOncePerWindow() async {
         let delivery = RecordingDelivery()
         let rig = Rig(usage: [.success(snapshot(at: t0, percent: 90)), .success(snapshot(at: t0, percent: 95))],

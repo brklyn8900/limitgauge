@@ -1,6 +1,5 @@
 import Foundation
 
-/// How the service gets a token. Production reads the Keychain; tests return or throw.
 public typealias TokenReader = @Sendable () async throws(CredentialError) -> AccessToken
 
 public protocol UsageFetching: Sendable {
@@ -44,7 +43,6 @@ public final class UsageService {
 
     /// The last good snapshot. Survives failures and relaunches.
     public private(set) var snapshot: UsageSnapshot?
-    /// Nil while the last attempt succeeded.
     private(set) var failures: FailureStreak?
 
     public var plan: Plan? { fetchedPlan?.plan }
@@ -66,14 +64,10 @@ public final class UsageService {
     public var onChange: (@MainActor () -> Void)?
 
     private var fetchedPlan: FetchedPlan?
-    /// Warnings already posted, per window (mirrors the store).
     private var fired: Set<WarningKey>
-    /// Warnings handed to `delivery` and not yet answered. A settings change during a refresh's
-    /// delivery must not post the same warning twice.
     private var delivering: Set<WarningKey> = []
     private var inFlight: Task<RefreshOutcome, Never>?
-    /// The token the endpoint last rejected, in memory only. A poll that reads it again sends
-    /// nothing; launch, menu open and Refresh still send it. Cleared by any success.
+    /// ADR-0002 point 3.
     private var rejectedToken: AccessToken?
     /// The problem of the last Keychain read, if it was refused or timed out. A poll then runs
     /// no read, so a Keychain dialog cannot come back on every poll; launch, menu open and
@@ -90,8 +84,6 @@ public final class UsageService {
     private let delivery: any WarningDelivery
     private let thresholds: @MainActor () -> WarningThresholds
     private let now: @Sendable () -> Date
-    /// How long one delivery may hold the refresh before it is abandoned as not delivered.
-    /// Internal so tests can shorten it.
     var deliveryTimeout: Duration = .seconds(10)
 
     /// Snapshot, plan and posted warnings load from `store`, the one place they persist.
@@ -120,7 +112,6 @@ public final class UsageService {
     public func refresh(_ reason: RefreshReason) -> Task<RefreshOutcome, Never> {
         if let inFlight { return inFlight }
         guard shouldFetch(for: reason) else {
-            // A skipped launch still arms the app's timer; a redraw on menu open is harmless.
             onChange?()
             return Task { .skipped }
         }
@@ -145,10 +136,7 @@ public final class UsageService {
         }
     }
 
-    // MARK: Private
-
-    /// The last attempt, successful or not. The cache and the scheduler both measure from it,
-    /// so a failure moves the clock. The cache skips it after a poll that sent nothing.
+    /// ADR-0002 points 1 and 4.
     private var lastAttempt: Date? {
         failures?.lastAttempt ?? snapshot?.fetchedAt
     }
@@ -163,8 +151,6 @@ public final class UsageService {
         }
     }
 
-    /// The whole refresh. Applies every effect once, before the task completes, so a caller
-    /// that awaits the outcome sees a finished state.
     private func perform(_ reason: RefreshReason) async -> RefreshOutcome {
         let started = now()
         let outcome: RefreshOutcome

@@ -47,7 +47,6 @@ public struct ClaudeCodeCredentials: Sendable {
         arguments: ["find-generic-password", "-s", service, "-w"]
     )
     static let readTimeout: Duration = .seconds(5)
-    /// The deadline as the message and the log state it, e.g. "5 s".
     static var readTimeoutText: String { "\(readTimeout.components.seconds) s" }
 
     let command: ToolRun.Command
@@ -59,7 +58,6 @@ public struct ClaudeCodeCredentials: Sendable {
         self.init(command: Self.security, timeout: Self.readTimeout)
     }
 
-    /// Tests: a stand-in tool and a short deadline.
     init(command: ToolRun.Command, timeout: Duration) {
         self.command = command
         self.timeout = timeout

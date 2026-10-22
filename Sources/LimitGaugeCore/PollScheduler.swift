@@ -83,10 +83,6 @@ enum PollScheduler {
         }
     }
 
-    /// The headroom pace of a snapshot, measured from its fetch: the least headroom among
-    /// limits still below their threshold (60 min if none), or one minute after the earliest
-    /// reset of a limit past its threshold, whichever is sooner. Limit states are taken at
-    /// `fetchedAt`, so a past limit's reset is always after the fetch.
     static func paced(_ snapshot: UsageSnapshot, thresholds: WarningThresholds) -> Date {
         let at = snapshot.fetchedAt
         let states = snapshot.limits.map { ($0, thresholds.state(of: $0, at: at)) }
@@ -128,7 +124,6 @@ public protocol WarningDelivery: AnyObject, Sendable {
 /// fired when it is delivered, not when it is due, so marking it is the caller's job.
 enum WarningTracker {
     struct Outcome: Equatable, Sendable {
-        /// Limits past their threshold whose warning has not been delivered in this window.
         var due: [RateLimit]
         /// `fired` without the keys of windows that have passed, so the next window can fire.
         var fired: Set<WarningKey>

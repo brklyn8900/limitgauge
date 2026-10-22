@@ -2,7 +2,6 @@ import Foundation
 import LimitGaugeCore
 import UserNotifications
 
-/// Posts limit warnings through Notification Center.
 @MainActor
 final class Notifier: NSObject, WarningDelivery, UNUserNotificationCenterDelegate {
     private let center = UNUserNotificationCenter.current()
@@ -24,8 +23,6 @@ final class Notifier: NSObject, WarningDelivery, UNUserNotificationCenterDelegat
         return [.banner, .list, .sound]
     }
 
-    /// Asks for permission once. Notifications are on by default (proposal, Warnings). True
-    /// if notifications are allowed.
     @discardableResult
     func requestAuthorizationIfEnabled() async -> Bool {
         guard Settings.notificationsEnabled else { return false }

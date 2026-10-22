@@ -1,6 +1,5 @@
 import Foundation
 
-/// The plan and when it was fetched, which were two optionals set together by convention.
 struct FetchedPlan: Equatable, Sendable {
     var plan: Plan
     var fetchedAt: Date

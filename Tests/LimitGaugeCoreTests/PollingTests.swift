@@ -14,20 +14,17 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
 /// backed off from the attempt, never seconds later and never not at all.
 @MainActor
 @Suite struct PollingAfterFailureTests {
-    /// With no snapshot to pace from, the backoff alone schedules the next poll.
     @Test func failureWithoutSnapshotSchedulesARetry() async {
         let rig = Rig(readToken: failing(.notFound))
         #expect(await rig.service.refresh(.poll).value == .failed(.noCredentials))
-        #expect(rig.service.nextPoll == t0.addingTimeInterval(60 * 60))      // needs the user: hourly
+        #expect(rig.service.nextPoll == t0.addingTimeInterval(60 * 60))
     }
 
-    /// A stale snapshot's pace is hours in the past; the backoff from the attempt decides, and
-    /// the old snapshot stays.
     @Test func failureWithStaleSnapshotBacksOffFromTheAttempt() async {
         let rig = Rig(usage: [.failure(.transport(URLError(.notConnectedToInternet)))],
                       seed: snapshot(at: t0.addingTimeInterval(-3 * 3600)))
         #expect(await rig.service.refresh(.poll).value == .failed(.offline))
-        #expect(rig.service.nextPoll == t0.addingTimeInterval(10 * 60))      // transient: 10 min
+        #expect(rig.service.nextPoll == t0.addingTimeInterval(10 * 60))
         #expect(rig.service.snapshot?.fetchedAt == t0.addingTimeInterval(-3 * 3600))
     }
 
@@ -39,11 +36,11 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(rig.service.nextPoll == t0.addingTimeInterval(600))
         clock.advance(600)
         _ = await rig.service.refresh(.poll).value
-        #expect(rig.service.nextPoll == t0.addingTimeInterval(600 + 1200))   // second failure: 20 min
+        #expect(rig.service.nextPoll == t0.addingTimeInterval(600 + 1200))
         clock.advance(1200)
         #expect(await rig.service.refresh(.poll).value == .fetched)
         #expect(rig.service.problem == nil)
-        #expect(rig.service.nextPoll == t0.addingTimeInterval(1800 + 3600))  // back to headroom pacing
+        #expect(rig.service.nextPoll == t0.addingTimeInterval(1800 + 3600))
     }
 
     @Test func rateLimitWaitsHalfAnHourThenAnHour() async {
@@ -56,9 +53,6 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(rig.service.nextPoll == t0.addingTimeInterval(90 * 60))
     }
 
-    /// While a refresh runs there is nothing to poll for, and the stale due time must not
-    /// re-arm the timer in the past: seen in the running app on 2026-10-21, where the start
-    /// of a poll's refresh fired the timer a second time.
     @Test func noPollIsDueWhileARefreshRuns() async throws {
         let rig = Rig(usage: [.success(snapshot(at: t0))], readToken: { () async throws(CredentialError) -> AccessToken in
             try? await Task.sleep(for: .milliseconds(100))
@@ -71,8 +65,6 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(rig.service.nextPoll == t0.addingTimeInterval(3600))
     }
 
-    /// The two-minute cache measures from the last attempt, so a failing endpoint is not
-    /// asked again on every menu open.
     @Test func menuOpenWithinTwoMinutesOfAFailureIsSkipped() async {
         let clock = TestClock(t0)
         let rig = Rig(clock: clock)                                           // fetcher answers 599
@@ -84,7 +76,6 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(rig.fetcher.usageTokens.count == 2)
     }
 
-    /// A dead token costs one rejected request, not one per poll. Menu open still sends it.
     @Test func pollDoesNotResendARejectedToken() async {
         let clock = TestClock(t0)
         let rig = Rig(usage: [.failure(.unauthorized), .failure(.unauthorized)], readToken: reading("dead"), clock: clock)
@@ -97,9 +88,6 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(rig.fetcher.usageTokens == ["dead", "dead"])
     }
 
-    /// A refused or timed-out Keychain read needs the user, like a rejected token: polls do not
-    /// run the security tool again, so a dialog cannot come back on every poll. Menu open still
-    /// reads.
     @Test(arguments: [CredentialError.refused(exitCode: 36), .refused(exitCode: 51), .refused(exitCode: 128), .timedOut])
     func pollDoesNotRerunARefusedRead(error: CredentialError) async {
         let clock = TestClock(t0)
@@ -119,7 +107,6 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(reads.withLock { $0 } == 2)
     }
 
-    /// A read that works again lets polls read again.
     @Test func successAfterARefusalLetsPollsReadAgain() async {
         let clock = TestClock(t0)
         let reads = Mutex(0)
@@ -135,7 +122,6 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(reads.withLock { $0 } == 3)
     }
 
-    /// The re-read after a 401 counts like any read: refused, it stops the next poll's read.
     @Test func refusedRereadAfterA401StopsPollReads() async {
         let clock = TestClock(t0)
         let reads = Mutex(0)
@@ -149,8 +135,6 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(reads.withLock { $0 } == 2)
     }
 
-    /// A read that fails for any reason but a refusal or a timeout lets polls read again, so
-    /// only a read that can bring a dialog back is held for the user.
     @Test(arguments: [CredentialError.notFound, .failed(exitCode: 7), .launchFailed, .malformed])
     func otherReadFailuresLetPollsReadAgain(error: CredentialError) async {
         let clock = TestClock(t0)
@@ -166,8 +150,6 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         #expect(reads.withLock { $0 } == 3)
     }
 
-    /// A poll that ran no read is not an attempt the menu can be served from: the first menu
-    /// open after it reads, even within two minutes.
     @Test func menuOpenSoonAfterAPollThatRanNoReadReads() async {
         let clock = TestClock(t0)
         let reads = Mutex(0)
@@ -182,14 +164,11 @@ private func snapshot(at date: Date, percent: Int = 10) -> UsageSnapshot {
         clock.advance(30)
         #expect(await rig.service.refresh(.menuOpen).value == .failed(.keychainDenied))
         #expect(reads.withLock { $0 } == 2)
-        // That read was a real attempt, so the cache holds from it again.
         clock.advance(30)
         #expect(await rig.service.refresh(.menuOpen).value == .skipped)
-        // The poll clock still moved: the skipped poll was an attempt for the scheduler.
         #expect(rig.service.nextPoll == t0.addingTimeInterval(3600 + 30 + 3600))
     }
 
-    /// Likewise for a poll that read a rejected token and sent nothing.
     @Test func menuOpenSoonAfterAPollThatSentNoRequestSends() async {
         let clock = TestClock(t0)
         let rig = Rig(usage: [.failure(.unauthorized), .failure(.unauthorized)], readToken: reading("dead"), clock: clock)

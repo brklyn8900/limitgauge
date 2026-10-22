@@ -1,8 +1,6 @@
 import Foundation
 import Synchronization
 
-/// Runs a command-line tool to its exit or to a deadline, whichever comes first, without
-/// blocking the caller's thread or actor. The credentials reader is the only user.
 struct ToolRun {
     struct Command: Sendable, Equatable {
         var tool: URL
@@ -16,10 +14,7 @@ struct ToolRun {
     }
 
     enum Failure: Error, Equatable {
-        /// The tool could not be launched: missing, or not executable.
         case launchFailed
-        /// The tool had not exited at the deadline. It was sent SIGTERM, then SIGKILL one
-        /// second later if it was still running.
         case timedOut
     }
 
@@ -87,8 +82,6 @@ struct ToolRun {
     }
 }
 
-/// Resumes a continuation exactly once; later calls return false and do nothing. Used where
-/// a result and a deadline race to finish the same wait.
 final class ResumeOnce<Value: Sendable>: Sendable {
     private let state = Mutex<CheckedContinuation<Value, Never>?>(nil)
 

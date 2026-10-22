@@ -2,7 +2,6 @@ import AppKit
 import LimitGaugeCore
 import ServiceManagement
 
-/// The settings window: thresholds, notifications, icon, warning dot, launch at login.
 @MainActor
 final class SettingsWindow: NSObject, NSWindowDelegate {
     private let notifier: Notifier
@@ -22,8 +21,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     private let dot = NSButton(checkboxWithTitle: "Show a red dot on the icon past a threshold", target: nil, action: nil)
     private let launch = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
 
-    /// `scopedLimitName` supplies the model name of the scoped weekly limit, e.g. "Fable",
-    /// so the threshold row is labelled like the menu row.
     init(notifier: Notifier, scopedLimitName: @escaping () -> String?, onChange: @escaping () -> Void) {
         self.notifier = notifier
         self.scopedLimitName = scopedLimitName
@@ -38,8 +35,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
-
-    // MARK: Layout
 
     private func makeWindow() -> NSWindow {
         let grid = NSGridView(views: [
@@ -91,7 +86,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         launch.target = self
         launch.action = #selector(launchChanged)
 
-        // Read from the bundle so the footer cannot drift from Info.plist.
         let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         let version = NSTextField(labelWithString: "limitgauge \(shortVersion ?? "dev")")
         version.font = .systemFont(ofSize: 11)
@@ -142,8 +136,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         row.spacing = 4
         return row
     }
-
-    // MARK: State
 
     private func load() {
         let t = Settings.thresholds

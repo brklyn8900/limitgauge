@@ -28,7 +28,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenu = StatusMenu(service: service) { [weak self] in self?.settingsWindow.show() }
         service.onChange = { [weak self] in self?.serviceChanged() }
 
-        // Fetches, or is skipped inside the two-minute cache; either way onChange arms the timer.
         service.refresh(.launch)
         Task {
             // A warning that waited for permission goes out once it is granted.
@@ -36,7 +35,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The only reaction to the service: redraw, and re-arm the poll.
     private func serviceChanged() {
         statusMenu.update()
         poller.schedule(at: service.nextPoll)

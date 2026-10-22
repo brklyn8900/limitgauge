@@ -58,7 +58,6 @@ enum RetryClass: Sendable {
     case transient, rateLimited, needsUser
 }
 
-/// A failed refresh: the problem the menu shows, and the one line the log gets.
 struct RefreshFailure: Error, Equatable {
     var problem: UsageProblem
     /// Built only from case names, exit codes, HTTP statuses and error domains and codes, so

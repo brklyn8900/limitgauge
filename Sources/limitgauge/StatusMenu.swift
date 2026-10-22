@@ -1,8 +1,6 @@
 import AppKit
 import LimitGaugeCore
 
-/// The menu bar item and its dropdown. Rows are rebuilt from the service state whenever
-/// the menu opens or the service changes while it is open.
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     private let service: UsageService
@@ -51,13 +49,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         update()
     }
 
-    /// Refreshes the icon, and the rows if the menu is showing.
     func update() {
         updateIcon()
         if isOpen { rebuild() }
     }
-
-    // MARK: NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
         isOpen = true
@@ -69,8 +64,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     func menuDidClose(_ menu: NSMenu) {
         isOpen = false
     }
-
-    // MARK: Rows
 
     private func addFooter() {
         updatedItem.isEnabled = false
@@ -175,8 +168,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     @objc private func showSettings() {
         openSettings()
     }
-
-    // MARK: Icon
 
     private func updateIcon() {
         item.button?.image = StatusIcon.image(for: Settings.icon)
