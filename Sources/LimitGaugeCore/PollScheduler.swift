@@ -52,19 +52,21 @@ struct FailureStreak: Equatable, Sendable {
     let problem: UsageProblem
     let count: Int
     let lastAttempt: Date
+    let pollSentNothing: Bool
 
-    static func first(_ problem: UsageProblem, at date: Date) -> FailureStreak {
-        FailureStreak(problem: problem, count: 1, lastAttempt: date)
+    static func first(_ problem: UsageProblem, at date: Date, pollSentNothing: Bool = false) -> FailureStreak {
+        FailureStreak(problem: problem, count: 1, lastAttempt: date, pollSentNothing: pollSentNothing)
     }
 
-    func next(_ problem: UsageProblem, at date: Date) -> FailureStreak {
-        FailureStreak(problem: problem, count: count + 1, lastAttempt: date)
+    func next(_ problem: UsageProblem, at date: Date, pollSentNothing: Bool = false) -> FailureStreak {
+        FailureStreak(problem: problem, count: count + 1, lastAttempt: date, pollSentNothing: pollSentNothing)
     }
 
-    private init(problem: UsageProblem, count: Int, lastAttempt: Date) {
+    private init(problem: UsageProblem, count: Int, lastAttempt: Date, pollSentNothing: Bool) {
         self.problem = problem
         self.count = count
         self.lastAttempt = lastAttempt
+        self.pollSentNothing = pollSentNothing
     }
 }
 

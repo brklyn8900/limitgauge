@@ -63,10 +63,12 @@ struct RefreshFailure: Error, Equatable {
     /// Built only from case names, exit codes, HTTP statuses and error domains and codes, so
     /// it is safe at `privacy: .public`. Never the token, the tool's output, or a response body.
     var logDescription: String
+    var pollSentNothing = false
 
-    init(problem: UsageProblem, logDescription: String) {
+    init(problem: UsageProblem, logDescription: String, pollSentNothing: Bool = false) {
         self.problem = problem
         self.logDescription = logDescription
+        self.pollSentNothing = pollSentNothing
     }
 
     init(_ error: CredentialError) {
@@ -110,10 +112,12 @@ struct RefreshFailure: Error, Equatable {
 
     /// A poll read the token the endpoint already rejected and sent nothing (ADR-0002 point 3).
     static let tokenStillRejected = RefreshFailure(
-        problem: .tokenRejected, logDescription: "usage: token already rejected; poll sent no request")
+        problem: .tokenRejected, logDescription: "usage: token already rejected; poll sent no request",
+        pollSentNothing: true)
 
     /// The last Keychain read was refused or timed out, so a poll ran no read (ADR-0002 point 3).
     static func readStillRefused(_ problem: UsageProblem) -> RefreshFailure {
-        RefreshFailure(problem: problem, logDescription: "security: last read refused or timed out; poll ran no read")
+        RefreshFailure(problem: problem, logDescription: "security: last read refused or timed out; poll ran no read",
+                       pollSentNothing: true)
     }
 }
