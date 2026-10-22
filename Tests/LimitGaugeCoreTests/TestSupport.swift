@@ -98,6 +98,7 @@ final class Rig {
         seedPlan: Plan? = nil,
         delivery: any WarningDelivery = RecordingDelivery(),
         thresholds: WarningThresholds = .default,
+        deliveryTimeout: Duration = .milliseconds(200),
         clock: TestClock = TestClock(Date(timeIntervalSince1970: 1_800_000_000))
     ) {
         store = SnapshotStore(defaults: UserDefaults(suiteName: suiteName)!)
@@ -108,7 +109,7 @@ final class Rig {
         self.clock = clock
         service = UsageService(readToken: readToken, fetcher: fetcher, store: store, delivery: delivery,
                                thresholds: { thresholds }, now: { clock.now })
-        service.deliveryTimeout = .milliseconds(200)
+        service.deliveryTimeout = deliveryTimeout
     }
 
     /// Sets the service's `onChange`, handing it the service. A closure that captured the rig
