@@ -113,7 +113,18 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
         {"limits": [{"kind": "session", "percent": 12.5, "resets_at": "2030-01-07T05:00:00+00:00"},
                     {"kind": "weekly_all", "percent": 50, "resets_at": "2030-01-10T22:00:00+00:00"}]}
         """.utf8)
-        #expect(try UsageDecoding.snapshot(from: data).sessionIsIdle == false)
+        let snap = try UsageDecoding.snapshot(from: data)
+        #expect(snap.sessionIsIdle == false)
+        #expect(snap.sessionIsUnreadable)
+    }
+
+    @Test func readSessionIsNeitherIdleNorUnreadable() throws {
+        let data = Data("""
+        {"limits": [{"kind": "session", "percent": 12, "resets_at": "2030-01-07T05:00:00+00:00"}]}
+        """.utf8)
+        let snap = try UsageDecoding.snapshot(from: data)
+        #expect(!snap.sessionIsIdle)
+        #expect(!snap.sessionIsUnreadable)
     }
 
     /// The log line names each failing field and how it failed, never its value.

@@ -22,6 +22,10 @@ enum MenuRows {
         gauge(title: RateLimit.Kind.session.title, percent: 0, caption: nil, past: false)
     }
 
+    static func unreadableSession() -> NSMenuItem {
+        gauge(title: RateLimit.Kind.session.title, percent: nil, caption: "Couldn't read this limit", past: false)
+    }
+
     /// `percent` nil: the value is unknown, so the label reads a dash and the bar is empty.
     private static func gauge(title: String, percent: Int?, caption: String?, past: Bool) -> NSMenuItem {
         let titleLabel = label(title, font: .systemFont(ofSize: 13, weight: .medium))

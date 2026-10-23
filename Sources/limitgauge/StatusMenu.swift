@@ -124,6 +124,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if let snapshot = service.snapshot {
             if snapshot.sessionIsIdle {
                 items.append(MenuRows.idleSession())
+            } else if snapshot.sessionIsUnreadable {
+                items.append(MenuRows.unreadableSession())
             }
             for limit in snapshot.limits {
                 items.append(MenuRows.limit(limit, state: thresholds.state(of: limit, at: now), now: now))

@@ -141,7 +141,13 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
     /// shows the session at 0%. Not when a session element was there but unreadable: that
     /// would be a confident 0% that never warns.
     public var sessionIsIdle: Bool {
-        limit(.session) == nil && !(unreadableLimitKinds ?? []).contains("session")
+        limit(.session) == nil && !sessionIsUnreadable
+    }
+
+    /// A session element was there but unreadable, and none was read: the menu shows the
+    /// session as unknown rather than hiding it.
+    public var sessionIsUnreadable: Bool {
+        limit(.session) == nil && (unreadableLimitKinds ?? []).contains("session")
     }
 }
 
