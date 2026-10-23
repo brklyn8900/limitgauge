@@ -116,6 +116,32 @@ private func utc(_ y: Int, _ mo: Int, _ d: Int, _ h: Int, _ mi: Int, _ s: Double
         #expect(try UsageDecoding.snapshot(from: data).sessionIsIdle == false)
     }
 
+    /// The log line names each failing field and how it failed, never its value.
+    @Test func unreadableElementsNameTheirFailingFields() throws {
+        let data = Data("""
+        [{"kind": "session", "percent": 0, "resets_at": null},
+         {"kind": "session", "percent": 0},
+         {"kind": "session", "percent": 12.5, "resets_at": "2030-01-07T05:00:00+00:00"},
+         {"kind": "session", "percent": 1, "resets_at": "tomorrow"},
+         {"kind": "weekly_scoped", "percent": 75, "resets_at": "2030-01-10T22:00:00+00:00",
+          "scope": {"model": {"display_name": 7}}},
+         {"percent": 1, "resets_at": "2030-01-10T22:00:00+00:00"},
+         "session",
+         {"kind": "weekly_all", "percent": 50, "resets_at": "2030-01-10T22:00:00+00:00", "scope": null}]
+        """.utf8)
+        let elements = try JSONDecoder().decode([LenientRawLimit].self, from: data)
+        #expect(elements.map(\.logDescription) == [
+            "session (resets_at: null)",
+            "session (resets_at: missing)",
+            "session (percent: not an integer)",
+            "session (resets_at: not a date)",
+            "weekly_scoped (scope: not the known shape)",
+            "(no kind) (kind: missing)",
+            "(no kind) (not an object)",
+            "weekly_all",
+        ])
+    }
+
     @Test func missingSessionIsIdle() throws {
         let data = Data("""
         {"limits": [{"kind": "weekly_all", "percent": 50, "resets_at": "2030-01-10T22:00:00+00:00"}]}

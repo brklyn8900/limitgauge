@@ -185,10 +185,12 @@ public enum UsageDecoding {
 
         var limits: [RateLimit] = []
         var unreadable: [String] = []
+        var unreadableDetail: [String] = []
         for element in elements {
             guard let l = element.limit, let kind = l.kind, let percent = l.percent,
                   let resetsAt = l.resets_at.flatMap(ISO8601.date) else {
                 unreadable.append(element.kind ?? "")
+                unreadableDetail.append(element.logDescription)
                 continue
             }
             let scopeName = l.scope?.model?.display_name ?? l.scope?.surface?.display_name
@@ -196,9 +198,10 @@ public enum UsageDecoding {
         }
         guard !limits.isEmpty else { throw Error.missingLimits }
         if !unreadable.isEmpty {
-            // Kinds are the endpoint's own enum strings, never account data, so they are public.
-            let kinds = unreadable.map { $0.isEmpty ? "(no kind)" : $0 }.joined(separator: ", ")
-            Log.fetch.error("usage: dropped \(unreadable.count) of \(elements.count) limits[] elements as unreadable: \(kinds, privacy: .public)")
+            // Kinds are the endpoint's own enum strings, and problems name fields, never values:
+            // no account data, so they are public.
+            let detail = unreadableDetail.joined(separator: "; ")
+            Log.fetch.error("usage: dropped \(unreadable.count) of \(elements.count) limits[] elements as unreadable: \(detail, privacy: .public)")
         }
 
         let cloud = raw.iguana_necktie?.value.flatMap { c -> DollarAllowance? in
@@ -271,13 +274,48 @@ struct RawLimit: Decodable {
 /// One `limits[]` element, read leniently. Its kind is read on its own, so an element that
 /// fails to decode still says which limit it was.
 struct LenientRawLimit: Decodable {
-    private enum Keys: String, CodingKey { case kind }
+    private enum Keys: String, CodingKey { case kind, percent, resets_at, scope }
     let limit: RawLimit?
     let kind: String?
+    /// Each field that keeps the element from reading, and how: "resets_at: null". Field
+    /// names and states only, never values, so it can be logged in public.
+    let problems: [String]
 
     init(from decoder: Decoder) {
         limit = try? RawLimit(from: decoder)
-        kind = try? decoder.container(keyedBy: Keys.self).decode(String.self, forKey: .kind)
+        guard let c = try? decoder.container(keyedBy: Keys.self) else {
+            kind = nil
+            problems = ["not an object"]
+            return
+        }
+        var problems: [String] = []
+        func read<T: Decodable>(_ key: Keys, _ type: T.Type, _ typeName: String, required: Bool = true) -> T? {
+            if !c.contains(key) {
+                if required { problems.append("\(key.stringValue): missing") }
+            } else if (try? c.decodeNil(forKey: key)) == true {
+                if required { problems.append("\(key.stringValue): null") }
+            } else if let value = try? c.decode(T.self, forKey: key) {
+                return value
+            } else {
+                problems.append("\(key.stringValue): not \(typeName)")
+            }
+            return nil
+        }
+        kind = read(.kind, String.self, "a string")
+        _ = read(.percent, Int.self, "an integer")
+        if let resetsAt = read(.resets_at, String.self, "a string"), ISO8601.date(resetsAt) == nil {
+            problems.append("resets_at: not a date")
+        }
+        _ = read(.scope, RawScope.self, "the known shape", required: false)
+        self.problems = problems
+    }
+}
+
+extension LenientRawLimit {
+    /// "session (resets_at: null)", as the unreadable-element log line shows it.
+    var logDescription: String {
+        let name = kind ?? "(no kind)"
+        return problems.isEmpty ? name : "\(name) (\(problems.joined(separator: ", ")))"
     }
 }
 
