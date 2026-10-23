@@ -7,7 +7,8 @@ The [proposal](proposal.md) is kept as written. These parts of it no longer hold
   already trusts. See [ADR-0004](adr/0004-read-credentials-through-security-cli.md).
 - **The idle session row.** The proposal hides a row whose field is missing from the response.
   The endpoint drops the session limit while no five-hour window is open, so the menu shows
-  **Current session** at 0% instead of hiding the row.
+  **Current session** at 0% instead of hiding the row. A session limit that is there but
+  unreadable shows a dash and "Couldn't read this limit", not 0% and not a hidden row.
 - **Poll pacing.** The proposal leaves out a limit whose warning has fired. limitgauge leaves
   out every limit at or past its threshold, warned or not, so a warning that could not be
   delivered doesn't hold polling at 10 minutes. See

@@ -57,6 +57,8 @@ something outside limitgauge changed, most likely how Claude Code stores the ite
   minutes old. **Refresh** fetches at once.
 - A red dot on the icon means a limit is past its warning threshold.
 - While no five-hour window is open, **Current session** shows 0% and no reset time.
+- If the session limit comes back in a shape limitgauge can't read, **Current session** shows a
+  dash and "Couldn't read this limit" until a fetch reads it.
 
 Between fetches, limitgauge checks in the background only to send warnings. The closer a limit
 is to its threshold, the sooner the next check: every 60, 30, or 10 minutes. After a failed
