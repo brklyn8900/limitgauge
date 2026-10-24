@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         )
         statusMenu = StatusMenu(service: service, codexService: codexService) { [weak self] in self?.settingsWindow.show() }
+        statusMenu.onTrackingChange = { [weak self] tracking in self?.shortcut.setMenuTracking(tracking) }
         service.onChange = { [weak self] in self?.serviceChanged() }
         codexService.onChange = { [weak self] in self?.serviceChanged() }
 

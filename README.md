@@ -89,7 +89,7 @@ Choose **Settings…** from the menu to set:
 
 - a warning threshold for each Claude limit, in percent,
 - a separate **Codex limits** threshold, applied to each reported Codex window,
-- a custom global **Open menu shortcut**: click Record shortcut and press your combination with Command, Control, or Option; Escape cancels and Clear removes it (no Accessibility permission needed),
+- a custom global **Menu shortcut** to open or close the menu: click Record shortcut and press your combination with Command, Control, or Option; Escape cancels and Clear removes it (no Accessibility permission needed),
 - **Detailed** or **Compact** view (compact overlays solid Claude All and Fable weekly fills in one track, with the longer fill underneath, plus one Codex weekly bar; hover for reset times and update details),
 - a separate Fable color for the overlaid weekly limit,
 - a bar color for each provider: pastel Blue, Teal, Green, Amber, Purple, and Pink, plus Black, Gray, and Light gray (warnings stay red),

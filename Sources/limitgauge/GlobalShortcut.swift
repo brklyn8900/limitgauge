@@ -51,33 +51,53 @@ final class GlobalShortcut {
     private var handler: EventHandlerRef?
     private var hotKey: EventHotKeyRef?
     private var active: KeyboardShortcut?
+    private var registrationID: UInt32 = 0
+    private var keyIsDown = false
+    private var isMenuTracking = false
+    private var menuObserver: CFRunLoopObserver?
+    private var localMonitor: Any?
     private let onPress: @MainActor () -> Void
     private(set) var problem: String?
     private static let signature: OSType = 0x4C474155 // LGAU
 
     init(onPress: @escaping @MainActor () -> Void) {
         self.onPress = onPress
-        var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let status = InstallEventHandler(GetApplicationEventTarget(), { _, event, context in
-            guard let event, let context else { return OSStatus(eventNotHandledErr) }
+        var types = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased)),
+        ]
+        let status = InstallEventHandler(GetEventDispatcherTarget(), { _, event, context in
+            guard Thread.isMainThread, let event, let context else { return OSStatus(eventNotHandledErr) }
             var identifier = EventHotKeyID()
             guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                                     nil, MemoryLayout<EventHotKeyID>.size, nil, &identifier) == noErr,
-                  identifier.signature == 0x4C474155, identifier.id == 1 else { return OSStatus(eventNotHandledErr) }
+                  identifier.signature == 0x4C474155 else { return OSStatus(eventNotHandledErr) }
             let owner = Unmanaged<GlobalShortcut>.fromOpaque(context).takeUnretainedValue()
-            Task { @MainActor [weak owner] in
-                guard let owner, owner.hotKey != nil else { return }
-                owner.onPress()
-            }
-            return noErr
-        }, 1, &type, Unmanaged.passUnretained(self).toOpaque(), &handler)
+            let id = identifier.id
+            let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
+            // A Task can remain queued until NSMenu's nested tracking loop exits, then reopen
+            // a menu just dismissed with Escape. Carbon delivers this callback on the main thread.
+            return MainActor.assumeIsolated { owner.handleHotKey(id: id, pressed: pressed) }
+        }, types.count, &types, Unmanaged.passUnretained(self).toOpaque(), &handler)
         if status != noErr { problem = "Could not enable keyboard shortcuts (\(status))." }
+    }
+
+    private func handleHotKey(id: UInt32, pressed: Bool) -> OSStatus {
+        guard hotKey != nil, !isMenuTracking, id == registrationID else { return OSStatus(eventNotHandledErr) }
+        if pressed {
+            keyIsDown = true
+        } else if keyIsDown {
+            keyIsDown = false
+            onPress()
+        }
+        return noErr
     }
 
     @discardableResult
     func apply(_ shortcut: KeyboardShortcut?) -> String? {
         guard handler != nil else { return problem ?? "Keyboard shortcuts are unavailable." }
-        if let shortcut, let active, shortcut.keyCode == active.keyCode && shortcut.modifiers == active.modifiers {
+        if let shortcut, let active, shortcut.keyCode == active.keyCode && shortcut.modifiers == active.modifiers,
+           hotKey != nil || isMenuTracking {
             problem = nil
             return nil
         }
@@ -90,32 +110,114 @@ final class GlobalShortcut {
             problem = "Choose a key with Command, Control, or Option."
             return problem
         }
+        // Acquire the replacement first: a conflict must leave the current shortcut working.
         var replacement: EventHotKeyRef?
+        let nextID = registrationID &+ 1
         let status = RegisterEventHotKey(shortcut.keyCode, shortcut.modifiers,
-                                        EventHotKeyID(signature: Self.signature, id: 1),
-                                        GetApplicationEventTarget(), OptionBits(kEventHotKeyExclusive), &replacement)
+                                        EventHotKeyID(signature: Self.signature, id: nextID),
+                                        GetEventDispatcherTarget(), OptionBits(kEventHotKeyExclusive), &replacement)
         guard status == noErr else {
-            problem = status == eventHotKeyExistsErr
-                ? "That shortcut is already in use. Try another combination."
-                : "macOS could not register that shortcut (\(status)). Try another combination."
+            problem = registrationProblem(status)
             return problem
         }
         suspend()
         hotKey = replacement
+        registrationID = nextID
         active = shortcut
+        if isMenuTracking { unregisterHotKey() }
         problem = nil
         return nil
     }
 
-    /// Temporarily release the chord so the recorder can capture that same chord too.
-    func suspend() {
+    /// Carbon reserves the chord even while NSMenu suppresses hotkey delivery. Temporarily
+    /// release it and handle only that chord locally until our status menu closes.
+    func setMenuTracking(_ tracking: Bool) {
+        guard tracking != isMenuTracking else { return }
+        isMenuTracking = tracking
+        keyIsDown = false
+        if tracking {
+            unregisterHotKey()
+            startMenuMonitor()
+        } else {
+            stopMenuMonitor()
+            if let active { _ = apply(active) }
+        }
+    }
+
+    private func matchesMenuEvent(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown || event.type == .keyUp,
+              isMenuTracking, let active, UInt32(event.keyCode) == active.keyCode else { return false }
+        if event.type == .keyUp { return keyIsDown }
+        guard event.type == .keyDown, let chord = KeyboardShortcut(event: event) else { return false }
+        return chord.modifiers == active.modifiers
+    }
+
+    /// Returns whether the event belongs to the menu shortcut. Toggle on release so holding
+    /// the chord never repeatedly opens/closes the menu, even across registration changes.
+    func handleMenuEvent(_ event: NSEvent) -> Bool {
+        guard matchesMenuEvent(event) else { return false }
+        if event.type == .keyDown {
+            if !event.isARepeat { keyIsDown = true }
+        } else {
+            keyIsDown = false
+            onPress()
+        }
+        return true
+    }
+
+    private func startMenuMonitor() {
+        // Menu tracking consumes ordinary keys before AppKit's local monitor sees them.
+        // Inspect only the queue head: searching for keys past mouse events stalls tracking.
+        menuObserver = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeSources.rawValue, true, 0) { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                while self.isMenuTracking,
+                      let event = NSApp.nextEvent(matching: .any, until: nil, inMode: .eventTracking, dequeue: false),
+                      self.matchesMenuEvent(event),
+                      let dequeued = NSApp.nextEvent(matching: .any, until: nil, inMode: .eventTracking, dequeue: true) {
+                    _ = self.handleMenuEvent(dequeued)
+                }
+            }
+        }
+        if let menuObserver {
+            CFRunLoopAddObserver(CFRunLoopGetMain(), menuObserver, CFRunLoopMode(RunLoop.Mode.eventTracking.rawValue as CFString))
+        }
+        // Function keys can instead reach NSApplication.sendEvent; cover that path too.
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            let consumed = MainActor.assumeIsolated { self?.handleMenuEvent(event) ?? false }
+            return consumed ? nil : event
+        }
+    }
+
+    private func stopMenuMonitor() {
+        if let menuObserver { CFRunLoopObserverInvalidate(menuObserver) }
+        menuObserver = nil
+        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        localMonitor = nil
+    }
+
+    private func unregisterHotKey() {
         if let hotKey { UnregisterEventHotKey(hotKey) }
         hotKey = nil
+    }
+
+    private func registrationProblem(_ status: OSStatus) -> String {
+        status == eventHotKeyExistsErr
+            ? "That shortcut is already in use. Try another combination."
+            : "macOS could not register that shortcut (\(status)). Try another combination."
+    }
+
+    /// Temporarily release the chord so the recorder can capture that same chord too.
+    func suspend() {
+        unregisterHotKey()
         active = nil
+        keyIsDown = false
     }
 
     func stop() {
         suspend()
+        stopMenuMonitor()
+        isMenuTracking = false
         if let handler { RemoveEventHandler(handler) }
         handler = nil
     }

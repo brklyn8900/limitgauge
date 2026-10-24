@@ -9,6 +9,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let menu = NSMenu()
     private let warningDot = WarningDotView()
     private let openSettings: () -> Void
+    var onTrackingChange: ((Bool) -> Void)?
     private var isOpen = false
     private var redrawAtPastReset: Timer?
     private var wakeObserver: NSObjectProtocol?
@@ -61,6 +62,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         isOpen = true
+        onTrackingChange?(true)
         rebuild()
         // Cached rows are already on screen; a stale snapshot refreshes behind them (ADR-0002).
         service.refresh(.menuOpen)
@@ -69,6 +71,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     func menuDidClose(_ menu: NSMenu) {
         isOpen = false
+        onTrackingChange?(false)
     }
 
     private func addFooter() {

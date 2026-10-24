@@ -74,7 +74,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
             [label("Codex color"), codexColors],
             [NSGridCell.emptyContentView, label("Warnings always turn red.", secondary: true)],
             [NSGridCell.emptyContentView, NSGridCell.emptyContentView],
-            [label("Open menu shortcut"), shortcutRecorder],
+            [label("Menu shortcut"), shortcutRecorder],
             [label("General"), launch],
         ])
         grid.rowSpacing = 8

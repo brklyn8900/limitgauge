@@ -19,7 +19,7 @@ final class ShortcutRecorder: NSStackView {
         buttons.spacing = 6
         record.target = self
         record.action = #selector(startRecording)
-        record.setAccessibilityLabel("Record shortcut to open the usage menu")
+        record.setAccessibilityLabel("Record shortcut to toggle the usage menu")
         clear.target = self
         clear.action = #selector(clearShortcut)
         note.font = .systemFont(ofSize: 11)
@@ -36,7 +36,7 @@ final class ShortcutRecorder: NSStackView {
         guard monitor == nil else { return }
         record.title = Settings.keyboardShortcut?.title ?? "Record shortcut…"
         clear.isEnabled = Settings.keyboardShortcut != nil
-        setNote(shortcut.problem ?? "Opens the menu from any app. Click to record.")
+        setNote(shortcut.problem ?? "Toggles the menu from any app. Click to record.")
     }
 
     @objc private func startRecording() {
