@@ -53,7 +53,12 @@ final class ColorPicker: NSStackView {
     private static func image(_ color: Settings.BarColor, selected: Bool) -> NSImage {
         NSImage(size: NSSize(width: 28, height: 28), flipped: false) { rect in
             color.color.setFill()
-            NSBezierPath(ovalIn: rect.insetBy(dx: 5, dy: 5)).fill()
+            let swatch = NSBezierPath(ovalIn: rect.insetBy(dx: 5, dy: 5))
+            swatch.fill()
+            // Keep black and light gray swatches visible against either appearance.
+            NSColor.labelColor.withAlphaComponent(0.25).setStroke()
+            swatch.lineWidth = 0.5
+            swatch.stroke()
             if selected {
                 NSColor.labelColor.setStroke()
                 let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 1.5, dy: 1.5))

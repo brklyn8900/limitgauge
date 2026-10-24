@@ -65,6 +65,8 @@ something outside limitgauge changed, most likely how Claude Code stores the ite
   minutes old. **Refresh** fetches at once.
 - A red dot on the icon means a limit is past its warning threshold.
 - For Claude, while no five-hour window is open, **Current session** shows 0% and no reset time.
+- Compact view shows only weekly bars; all existing warning checks remain active, including
+  limits hidden by the compact layout.
 - Codex shows the windows and buckets actually returned by the service, labeled by duration.
   A missing window is not treated as 0%. If a refresh fails, the last readings remain visible
   with their age and the error; expired windows show as unknown until refreshed.
@@ -87,7 +89,10 @@ Choose **Settings…** from the menu to set:
 
 - a warning threshold for each Claude limit, in percent,
 - a separate **Codex limits** threshold, applied to each reported Codex window,
-- a bar color for each provider: Blue, Teal, Green, Amber, Purple, or Pink (warnings stay red),
+- a custom global **Open menu shortcut**: click Record shortcut and press your combination with Command, Control, or Option; Escape cancels and Clear removes it (no Accessibility permission needed),
+- **Detailed** or **Compact** view (compact overlays solid Claude All and Fable weekly fills in one track, with the longer fill underneath, plus one Codex weekly bar; hover for reset times and update details),
+- a separate Fable color for the overlaid weekly limit,
+- a bar color for each provider: pastel Blue, Teal, Green, Amber, Purple, and Pink, plus Black, Gray, and Light gray (warnings stay red),
 - whether limitgauge sends notifications,
 - the menu bar icon, from six styles, and whether it shows the red dot,
 - whether limitgauge opens at login.

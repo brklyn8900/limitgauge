@@ -141,6 +141,13 @@ public struct UsageSnapshot: Equatable, Sendable, Codable {
         limits.first { $0.kind == kind }
     }
 
+    /// The main Codex weekly window. Its stable identity is produced by CodexUsageReader
+    /// from bucket ID and duration, independent of primary/secondary slot or display label.
+    /// Never substitute another bucket or a shorter window in a weekly compact view.
+    public var codexWeeklyLimit: RateLimit? {
+        limits.first { $0.kind == .other("codex:codex:10080") }
+    }
+
     /// The endpoint drops the session limit while no five-hour window is open, so the menu
     /// shows the session at 0%. Not when a session element was there but unreadable: that
     /// would be a confident 0% that never warns.

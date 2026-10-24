@@ -33,6 +33,12 @@ import Testing
         {"id":2,"result":{"rateLimits":{"limitId":"codex","primary":{"usedPercent":8,"windowDurationMins":10080,"resetsAt":1893456000},"secondary":null}}}
         """.utf8))
         #expect(reading.snapshot.limits[0].title == "Codex · 7 days")
+        #expect(reading.snapshot.codexWeeklyLimit?.percent == 8)
+    }
+
+    @Test func compactWeeklyNeverSubstitutesAnotherQuota() throws {
+        let reading = try CodexUsageReader.decode(Data(#"{"id":2,"result":{"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":10,"windowDurationMins":300,"resetsAt":1893456000}},"other":{"limitId":"other","primary":{"usedPercent":90,"windowDurationMins":10080,"resetsAt":1893456000}}}}}"#.utf8))
+        #expect(reading.snapshot.codexWeeklyLimit == nil)
     }
 
     @Test func windowIdentityDoesNotDependOnPrimaryOrSecondarySlot() throws {

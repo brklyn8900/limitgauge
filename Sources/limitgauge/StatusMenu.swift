@@ -49,6 +49,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         updateIconAndOpenRows()
     }
 
+    func toggleMenu() {
+        if isOpen { menu.cancelTracking() }
+        else { item.button?.performClick(nil) }
+    }
+
     func updateIconAndOpenRows() {
         updateIcon()
         if isOpen { rebuild() }
@@ -104,6 +109,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     private func contentItems(now: Date) -> [NSMenuItem] {
+        if Settings.compactView { return compactItems(now: now) }
         var items: [NSMenuItem] = []
         let thresholds = Settings.thresholds
 
@@ -121,7 +127,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 items.append(MenuRows.unreadableSession())
             }
             for limit in snapshot.limits {
-                items.append(MenuRows.limit(limit, state: thresholds.state(of: limit, at: now), now: now, color: Settings.claudeColor.color))
+                items.append(MenuRows.limit(limit, state: thresholds.state(of: limit, at: now), now: now, color: limit.kind == .weeklyScoped ? Settings.fableColor.color : Settings.claudeColor.color))
             }
 
             var extras: [NSMenuItem] = []
@@ -168,6 +174,23 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             items.append(MenuRows.message(problem.message))
         }
         return items
+    }
+
+    private func compactItems(now: Date) -> [NSMenuItem] {
+        let aggregate = service.snapshot?.limit(.weeklyAll)
+        let fable = service.snapshot?.limits.first {
+            $0.kind == .weeklyScoped && $0.scopeName?.caseInsensitiveCompare("Fable") == .orderedSame
+        }
+        return [
+            CompactUsageRow.item(title: "Claude", readings: [
+                .init(name: "All", limit: aggregate, color: Settings.claudeColor.color),
+                .init(name: "Fable", limit: fable, color: Settings.fableColor.color)
+            ], thresholds: Settings.thresholds, service: service, now: now),
+            CompactUsageRow.item(title: "Codex", readings: [
+                .init(name: "Weekly", limit: codexService.snapshot?.codexWeeklyLimit,
+                      color: Settings.codexColor.color)
+            ], thresholds: Settings.codexThresholds, service: codexService, now: now)
+        ]
     }
 
     private func providerHeader(_ name: String, service: UsageService, now: Date) -> NSMenuItem {

@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var poller: Poller!
     private var codexPoller: Poller!
     private var settingsWindow: SettingsWindow!
+    private var shortcut: GlobalShortcut!
     private let notifier = Notifier()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -31,8 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         codexPoller = Poller { [weak self] in self?.codexService.refresh(.poll) }
         poller = Poller { [weak self] in self?.service.refresh(.poll) }
+        shortcut = GlobalShortcut { [weak self] in self?.statusMenu?.toggleMenu() }
+        shortcut.apply(Settings.keyboardShortcut)
         settingsWindow = SettingsWindow(
             notifier: notifier,
+            shortcut: shortcut,
             scopedLimitName: { [weak self] in self?.service.snapshot?.limit(.weeklyScoped)?.scopeName },
             onChange: { [weak self] in
                 self?.service.reevaluateWarnings()
@@ -51,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 codexService.reevaluateWarnings()
             }
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        shortcut.stop()
     }
 
     private func serviceChanged() {
