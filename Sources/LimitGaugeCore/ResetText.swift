@@ -11,6 +11,31 @@ public enum ResetText {
         return "Resets in \(duration(remaining)) (\(clock(reset, now: now, calendar: calendar)))"
     }
 
+    /// Compact pacing estimate for weekly quotas, using exact elapsed 24-hour days.
+    /// Unknown, invalid and elapsed windows must never imply a fresh allowance.
+    public static func weeklyPacing(_ limit: RateLimit, now: Date, includeReset: Bool = true) -> String? {
+        switch limit.kind {
+        case .weeklyAll, .weeklyScoped: break
+        case .other(let identity) where identity.hasPrefix("codex:") && identity.hasSuffix(":10080"): break
+        default: return nil
+        }
+        let seconds = limit.resetsAt.timeIntervalSince(now)
+        guard seconds.isFinite, seconds > 0, (0...100).contains(limit.percent) else { return nil }
+        let remaining = 100 - limit.percent
+        let budget: String
+        if seconds < 86_400 {
+            budget = "\(remaining)% left"
+        } else {
+            let daily = Double(remaining) / (seconds / 86_400)
+            // Avoid rounding a small but nonzero allowance down to zero.
+            let amount = daily > 0 && daily < 1 ? "<1" : String(Int(daily.rounded()))
+            budget = amount == "<1" ? "<1%/day" : "~\(amount)%/day"
+        }
+        guard includeReset else { return budget }
+        let reset = seconds <= 30 ? "resets now" : "resets in \(duration(seconds))"
+        return "\(budget) · \(reset)"
+    }
+
     /// "Expires Nov 5 at 2:59 AM".
     public static func expires(at date: Date, calendar: Calendar = .current) -> String {
         "Expires \(date.formatted(style(calendar).month(.abbreviated).day().hour().minute()))"

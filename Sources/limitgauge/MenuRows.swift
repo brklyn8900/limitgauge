@@ -12,7 +12,11 @@ enum MenuRows {
         switch state {
         case .below, .past:
             gauge(title: limit.title, percent: limit.percent,
-                  caption: ResetText.resets(at: limit.resetsAt, now: now), past: state == .past, color: color)
+                  caption: ResetText.weeklyPacing(limit, now: now) ?? ResetText.resets(at: limit.resetsAt, now: now),
+                  past: state == .past, color: color,
+                  tooltip: ResetText.weeklyPacing(limit, now: now).map { _ in
+                      "Remaining quota divided by time until reset, in 24-hour days. An estimate in quota percentage points, not messages.\n" + ResetText.resets(at: limit.resetsAt, now: now)
+                  })
         case .reset:
             gauge(title: limit.title, percent: nil, caption: "Reset since the last update", past: false, color: color)
         }
@@ -27,7 +31,7 @@ enum MenuRows {
     }
 
     /// `percent` nil: the value is unknown, so the label reads a dash and the bar is empty.
-    private static func gauge(title: String, percent: Int?, caption: String?, past: Bool, color: NSColor = .controlAccentColor) -> NSMenuItem {
+    private static func gauge(title: String, percent: Int?, caption: String?, past: Bool, color: NSColor = .controlAccentColor, tooltip: String? = nil) -> NSMenuItem {
         let titleLabel = label(title, font: .systemFont(ofSize: 13, weight: .medium))
         let percentLabel = label(percent.map { "\($0)%" } ?? "\u{2013}", font: .monospacedDigitSystemFont(ofSize: 13, weight: .medium))
         percentLabel.textColor = past ? .systemRed : .labelColor
@@ -46,7 +50,9 @@ enum MenuRows {
             captionLabel.textColor = .secondaryLabelColor
             rows.append(captionLabel)
         }
-        return item(stack(rows, spacing: 5))
+        let view = stack(rows, spacing: 5)
+        view.toolTip = tooltip
+        return item(view)
     }
 
     static func keyValue(_ key: String, _ value: String, detail: String? = nil, quiet: Bool = false) -> NSMenuItem {

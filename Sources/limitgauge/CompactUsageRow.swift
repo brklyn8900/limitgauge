@@ -28,6 +28,21 @@ enum CompactUsageRow {
             let value = NSTextField(labelWithString: "\(reading.name) \(percent.map { "\($0)%" } ?? "–")")
             value.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
             value.textColor = state == .past ? .systemRed : .labelColor
+            if state != .reset, let limit = reading.limit,
+               let pacing = ResetText.weeklyPacing(limit, now: now, includeReset: false) {
+                let amount = pacing.replacingOccurrences(of: "~", with: "")
+                    .replacingOccurrences(of: "/day", with: "")
+                    .replacingOccurrences(of: " left", with: "")
+                let text = NSMutableAttributedString(string: value.stringValue, attributes: [
+                    .font: value.font!, .foregroundColor: value.textColor!
+                ])
+                text.append(NSAttributedString(string: "/\(amount)", attributes: [
+                    .font: value.font!, .foregroundColor: NSColor.secondaryLabelColor
+                ]))
+                value.attributedStringValue = text
+                value.widthAnchor.constraint(equalToConstant: ceil(text.size().width) + 4).isActive = true
+                details.append("\(reading.name) budget: \(pacing)")
+            }
             let entry = NSStackView(views: [dot, value])
             entry.orientation = .horizontal
             entry.spacing = 3
@@ -41,6 +56,7 @@ enum CompactUsageRow {
             }
             details.append("\(reading.name): \(detail)")
         }
+        details.append("Used % / estimated daily budget %. Under 24 hours, the second number is quota left until reset. Daily pacing uses 24-hour days; quotas are independent, not additive.")
         if let snapshot = service.snapshot { details.append("Updated \(ResetText.ago(snapshot.fetchedAt, now: now))") }
         if service.isRefreshing { details.append("Updating…") }
         if let problem = service.problem { details.append(problem.message) }
@@ -57,12 +73,13 @@ enum CompactUsageRow {
         bar.setAccessibilityRole(.image)
         bar.setAccessibilityLabel(tooltip)
         bar.heightAnchor.constraint(equalToConstant: 16).isActive = true
-        let content = NSStackView(views: [header, bar])
+        let rows: [NSView] = [header, bar]
+        let content = NSStackView(views: rows)
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 3
         content.edgeInsets = NSEdgeInsets(top: 7, left: 14, bottom: 7, right: 14)
-        for child in [header, bar] {
+        for child in rows {
             child.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -28).isActive = true
         }
         content.widthAnchor.constraint(equalToConstant: MenuRows.width).isActive = true

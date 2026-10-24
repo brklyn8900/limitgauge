@@ -3,6 +3,28 @@ import Testing
 @testable import LimitGaugeCore
 
 @Suite struct ResetTextTests {
+    @Test func weeklyPacing() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func caption(_ percent: Int, _ hours: Double, _ kind: RateLimit.Kind = .weeklyAll) -> String? {
+            ResetText.weeklyPacing(RateLimit(kind: kind, percent: percent, resetsAt: now + hours * 3600), now: now)
+        }
+        let compact = RateLimit(kind: .weeklyAll, percent: 46, resetsAt: now + 72 * 3600)
+        #expect(ResetText.weeklyPacing(compact, now: now, includeReset: false) == "~18%/day")
+        #expect(caption(46, 72) == "~18%/day · resets in 3d")
+        #expect(caption(73, 36, .weeklyScoped) == "~18%/day · resets in 1d 12h")
+        #expect(caption(73, 8, .other("codex:codex:10080")) == "27% left · resets in 8h")
+        #expect(caption(73, 24) == "~27%/day · resets in 1d")
+        #expect(caption(99, 72) == "<1%/day · resets in 3d")
+        #expect(caption(100, 72) == "~0%/day · resets in 3d")
+        #expect(caption(0, 168) == "~14%/day · resets in 7d")
+        #expect(caption(73, 0) == nil)
+        #expect(caption(73, -1) == nil)
+        #expect(caption(101, 24) == nil)
+        #expect(caption(10, 3, .session) == nil)
+        #expect(caption(10, 72, .other("codex:codex:300")) == nil)
+        #expect(caption(10, 72, .other("unknown")) == nil)
+    }
+
     @Test func durations() {
         #expect(ResetText.duration(134 * 60) == "2h 14m")
         #expect(ResetText.duration(2 * 3600) == "2h")
