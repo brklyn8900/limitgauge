@@ -20,6 +20,7 @@ public enum UsageProblem: Equatable, Sendable {
     case offline
     case server(Int)
     case decoding
+    case codex(CodexUsageError)
 
     public var message: String {
         switch self {
@@ -35,6 +36,11 @@ public enum UsageProblem: Equatable, Sendable {
         case .offline: return "Could not reach the usage endpoint."
         case .server(let status): return "Usage endpoint returned \(status)."
         case .decoding: return "Usage response could not be read."
+        case .codex(.notInstalled): return "Install Codex CLI and sign in to see Codex usage."
+        case .codex(.notSignedIn): return "Run codex in a terminal and sign in with ChatGPT to see usage."
+        case .codex(.timedOut): return "Codex usage took too long. Refresh to try again."
+        case .codex(.unavailable): return "Could not read Codex usage. Check your connection and Codex sign-in."
+        case .codex(.invalidResponse): return "Codex usage response could not be read. Try updating Codex CLI."
         }
     }
 
@@ -42,6 +48,8 @@ public enum UsageProblem: Equatable, Sendable {
     /// problem does not build until it has a retry policy.
     var retry: RetryClass {
         switch self {
+        case .codex(.notInstalled), .codex(.notSignedIn): return .needsUser
+        case .codex(.timedOut), .codex(.unavailable), .codex(.invalidResponse): return .transient
         case .offline, .decoding: return .transient
         case .server(429): return .rateLimited
         case .server: return .transient

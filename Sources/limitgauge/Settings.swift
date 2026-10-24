@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import LimitGaugeCore
 
 /// User settings in UserDefaults. Keys are chosen so that the default is the zero value.
@@ -21,6 +21,33 @@ enum Settings {
             case .timer: return "Timer"
             }
         }
+    }
+
+    enum BarColor: String, CaseIterable {
+        case blue, teal, green, amber, purple, pink
+
+        var title: String { rawValue.capitalized }
+
+        var color: NSColor {
+            switch self {
+            case .blue: return .systemBlue
+            case .teal: return .systemTeal
+            case .green: return .systemGreen
+            case .amber: return NSColor(srgbRed: 1, green: 0.68, blue: 0.12, alpha: 1)
+            case .purple: return .systemPurple
+            case .pink: return .systemPink
+            }
+        }
+    }
+
+    static var claudeColor: BarColor {
+        get { UserDefaults.standard.string(forKey: "claudeColor").flatMap(BarColor.init(rawValue:)) ?? .blue }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "claudeColor") }
+    }
+
+    static var codexColor: BarColor {
+        get { UserDefaults.standard.string(forKey: "codexColor").flatMap(BarColor.init(rawValue:)) ?? .amber }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "codexColor") }
     }
 
     private static let iconKey = "icon"
@@ -51,4 +78,18 @@ enum Settings {
         }
         set { UserDefaults.standard.set(try? JSONEncoder().encode(newValue), forKey: thresholdsKey) }
     }
+    /// Codex windows are returned dynamically; one threshold applies to each reported bucket.
+    static var codexWarningThreshold: Int {
+        get {
+            let value = UserDefaults.standard.object(forKey: "codexWarningThreshold") as? Int ?? 80
+            return min(max(value, 1), 100)
+        }
+        set { UserDefaults.standard.set(min(max(newValue, 1), 100), forKey: "codexWarningThreshold") }
+    }
+
+    static var codexThresholds: WarningThresholds {
+        let value = codexWarningThreshold
+        return WarningThresholds(session: value, weeklyAll: value, weeklyScoped: value)
+    }
+
 }

@@ -4,28 +4,35 @@
 	<img src="docs/images/menu-warning.png" width="324" alt="The limitgauge menu: plan, current session, this week, and Fable this week with reset times, credits, and the week by surface. Fable this week is past its threshold, so its bar is red and the icon has a red dot.">
 </p>
 
-limitgauge shows your Claude plan's usage limits in the macOS menu bar. Click the icon to see
-the current session, this week, and the weekly model limit, each with its reset time. The menu
-also shows your credits and how the week splits across Claude Code, chats, and Cowork. These
-are the same numbers as the Usage page in claude.ai settings.
+limitgauge shows your Claude and Codex plan usage limits in the macOS menu bar. The Claude
+section shows the current session, this week, and the weekly model limit, each with its reset
+time, plus credits and the split across Claude Code, chats, and Cowork. These are the same
+numbers as the Usage page in claude.ai settings. The Codex section shows the quota windows
+reported for your signed-in account, with their percentages and reset times.
 
 When a limit passes a threshold you set, limitgauge sends a notification and puts a red dot on
 its icon. It reads the sign-in that Claude Code already keeps in your Keychain, so you have
-nothing to configure and no token to paste.
+nothing to configure and no token to paste. For Codex, it asks the local Codex CLI app server
+for the limits of the account already signed in with ChatGPT. Each provider has its own
+cached readings, update time, and failure message.
 
-limitgauge is unofficial and not affiliated with Anthropic.
+limitgauge is unofficial and not affiliated with Anthropic or OpenAI.
 
 ## Why limitgauge
 
-limitgauge never raises a Keychain dialog, never refreshes or rewrites Claude Code's sign-in,
-and calls only two read-only endpoints on `api.anthropic.com`. In the background, it checks
-hourly while your limits are far from their thresholds and every 10 minutes when one gets close.
+The Claude reader never raises a Keychain dialog, never refreshes or rewrites Claude Code's
+sign-in, and calls only two read-only endpoints on `api.anthropic.com`. The Codex reader uses
+its documented local app-server protocol and never handles a Codex token itself. In the
+background, each provider checks hourly while its limits are far from their thresholds and
+every 10 minutes when one gets close.
 
 ## Requirements
 
 - macOS 26 or later.
 - Xcode 26, or its command line tools.
-- Claude Code, signed in with your Claude subscription on this Mac.
+- Claude Code, signed in with your Claude subscription on this Mac, for Claude usage.
+- Codex CLI, signed in with ChatGPT on this Mac, for Codex usage. API-key billing is not the
+  subscription quota shown here. Either provider can work while the other is unavailable.
 
 ## Install
 
@@ -51,12 +58,16 @@ something outside limitgauge changed, most likely how Claude Code stores the ite
 
 ## Read your limits
 
-- Click the icon. The menu shows your plan, each limit with its percent and reset time, your
-  credits, and the week by surface.
+- Click the icon. The menu shows separate Claude and Codex sections with their plan, last
+  successful update time, limits, and reset times. Claude also shows credits and the week by
+  surface.
 - limitgauge fetches new numbers when you open the menu, if the last fetch is more than two
   minutes old. **Refresh** fetches at once.
 - A red dot on the icon means a limit is past its warning threshold.
-- While no five-hour window is open, **Current session** shows 0% and no reset time.
+- For Claude, while no five-hour window is open, **Current session** shows 0% and no reset time.
+- Codex shows the windows and buckets actually returned by the service, labeled by duration.
+  A missing window is not treated as 0%. If a refresh fails, the last readings remain visible
+  with their age and the error; expired windows show as unknown until refreshed.
 - If the session limit comes back in a shape limitgauge can't read, **Current session** shows a
   dash and "Couldn't read this limit" until a fetch reads it.
 
@@ -74,7 +85,9 @@ fetch, the checks space out.
 
 Choose **Settings…** from the menu to set:
 
-- a warning threshold for each limit, in percent,
+- a warning threshold for each Claude limit, in percent,
+- a separate **Codex limits** threshold, applied to each reported Codex window,
+- a bar color for each provider: Blue, Teal, Green, Amber, Purple, or Pink (warnings stay red),
 - whether limitgauge sends notifications,
 - the menu bar icon, from six styles, and whether it shows the red dot,
 - whether limitgauge opens at login.
@@ -94,7 +107,7 @@ requests to two endpoints:
 | `/api/oauth/usage` | Your limits, credits, and the week by surface | On each fetch |
 | `/api/oauth/profile` | Your plan name | At most once a day |
 
-limitgauge makes no other network requests. It keeps the token in memory only and never writes
+The Claude reader makes no other network requests. It keeps the token in memory only and never writes
 it to disk or to the log. It never refreshes the token or changes the Keychain item. When the
 token expires, the menu tells you to run `claude` in a terminal, which signs you in again.
 
@@ -103,12 +116,35 @@ without notice. Depending on the change, limitgauge then shows an error instead 
 a row goes missing from the menu with no error. See
 [ADR-0001](docs/adr/0001-usage-endpoint-with-claude-code-token.md).
 
+### Codex usage
+
+limitgauge launches a short-lived `codex app-server --stdio`, completes the initialization
+handshake, and calls `account/rateLimits/read`. It reads percentages, window durations, reset
+times, bucket labels, and the plan when supplied. It does not start a coding turn, redeem a
+reset credit, log in, or log out. The process is closed after the read; a deadline prevents a
+stuck helper from stopping future refreshes.
+
+Codex owns authentication and its service requests. limitgauge does not read `auth.json`,
+copy tokens, or implement token refresh. Codex itself may refresh its existing sign-in or
+update its own state; the Claude reader's never-refresh promise does not apply to Codex.
+
+The reader discovers Codex in `/opt/homebrew/bin`, `/usr/local/bin`, the Codex application
+bundle, or the app's `PATH`. It never invokes a shell. If it cannot find Codex, the menu
+explains how to enable the provider. Missing sign-in, a timeout, or an unreadable response
+shows a message instead of a fabricated usage value. Raw responses and helper stderr are
+not logged or cached.
+
+See the [official app-server documentation](https://learn.chatgpt.com/docs/app-server) and
+[ADR-0006](docs/adr/0006-codex-usage.md).
+
 ## What limitgauge stores
 
 In its preferences, under `io.github.eladefrati.limitgauge`, limitgauge keeps its settings, the
 last usage numbers, your plan name, and a record of the warnings it sent. The profile response
-also holds your account email. limitgauge keeps only the plan name from it. It doesn't cache
-responses, so no response reaches disk.
+also holds your account email. limitgauge keeps only the plan name from it. Codex's account
+identifier and other response metadata are discarded. Codex readings and warning records use
+separate preference keys, preserving the existing Claude cache and warnings. limitgauge does
+not cache raw responses.
 
 limitgauge logs failures to the macOS unified log, never the token or a response body. To watch
 the log, run `make log`.

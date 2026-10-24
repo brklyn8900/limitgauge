@@ -10,14 +10,19 @@ struct FetchedPlan: Equatable, Sendable {
 /// saving are internal, so only the service reads or writes it.
 public struct SnapshotStore {
     private let defaults: UserDefaults
-    private let snapshotKey = "snapshot"
-    private let planKey = "plan"
-    private let planFetchedAtKey = "planFetchedAt"
+    private let snapshotKey: String
+    private let planKey: String
+    private let planFetchedAtKey: String
     /// The key `Settings.firedWarnings` used, so posted warnings survive the upgrade.
-    private let firedWarningsKey = "firedWarnings"
+    private let firedWarningsKey: String
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard, namespace: String = "") {
         self.defaults = defaults
+        let prefix = namespace.isEmpty ? "" : namespace + "."
+        snapshotKey = prefix + "snapshot"
+        planKey = prefix + "plan"
+        planFetchedAtKey = prefix + "planFetchedAt"
+        firedWarningsKey = prefix + "firedWarnings"
     }
 
     func loadSnapshot() -> UsageSnapshot? {

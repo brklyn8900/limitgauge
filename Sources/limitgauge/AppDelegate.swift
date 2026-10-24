@@ -4,8 +4,10 @@ import LimitGaugeCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var service: UsageService!
+    private var codexService: UsageService!
     private var statusMenu: StatusMenu!
     private var poller: Poller!
+    private var codexPoller: Poller!
     private var settingsWindow: SettingsWindow!
     private let notifier = Notifier()
 
@@ -19,23 +21,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             delivery: notifier,
             thresholds: { Settings.thresholds }
         )
+        codexService = UsageService(
+            readCodex: { () async throws(CodexUsageError) -> CodexUsageReading in
+                try await CodexUsageReader().read()
+            },
+            store: SnapshotStore(namespace: "codex"),
+            delivery: notifier,
+            thresholds: { Settings.codexThresholds }
+        )
+        codexPoller = Poller { [weak self] in self?.codexService.refresh(.poll) }
         poller = Poller { [weak self] in self?.service.refresh(.poll) }
         settingsWindow = SettingsWindow(
             notifier: notifier,
             scopedLimitName: { [weak self] in self?.service.snapshot?.limit(.weeklyScoped)?.scopeName },
-            onChange: { [weak self] in self?.service.reevaluateWarnings() }
+            onChange: { [weak self] in
+                self?.service.reevaluateWarnings()
+                self?.codexService.reevaluateWarnings()
+            }
         )
-        statusMenu = StatusMenu(service: service) { [weak self] in self?.settingsWindow.show() }
+        statusMenu = StatusMenu(service: service, codexService: codexService) { [weak self] in self?.settingsWindow.show() }
         service.onChange = { [weak self] in self?.serviceChanged() }
+        codexService.onChange = { [weak self] in self?.serviceChanged() }
 
         service.refresh(.launch)
+        codexService.refresh(.launch)
         Task {
-            if await notifier.requestAuthorizationIfEnabled() { service.reevaluateWarnings() }
+            if await notifier.requestAuthorizationIfEnabled() {
+                service.reevaluateWarnings()
+                codexService.reevaluateWarnings()
+            }
         }
     }
 
     private func serviceChanged() {
         statusMenu.updateIconAndOpenRows()
         poller.schedule(at: service.nextPoll)
+        codexPoller.schedule(at: codexService.nextPoll)
     }
 }

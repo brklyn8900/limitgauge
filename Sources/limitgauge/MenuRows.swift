@@ -8,13 +8,13 @@ enum MenuRows {
 
     /// Title, percent, bar and reset time. A limit whose window has reset since the fetch
     /// shows a dash, an empty bar and no red: its value is unknown (ADR-0005 point 4).
-    static func limit(_ limit: RateLimit, state: LimitState, now: Date) -> NSMenuItem {
+    static func limit(_ limit: RateLimit, state: LimitState, now: Date, color: NSColor = .controlAccentColor) -> NSMenuItem {
         switch state {
         case .below, .past:
             gauge(title: limit.title, percent: limit.percent,
-                  caption: ResetText.resets(at: limit.resetsAt, now: now), past: state == .past)
+                  caption: ResetText.resets(at: limit.resetsAt, now: now), past: state == .past, color: color)
         case .reset:
-            gauge(title: limit.title, percent: nil, caption: "Reset since the last update", past: false)
+            gauge(title: limit.title, percent: nil, caption: "Reset since the last update", past: false, color: color)
         }
     }
 
@@ -27,7 +27,7 @@ enum MenuRows {
     }
 
     /// `percent` nil: the value is unknown, so the label reads a dash and the bar is empty.
-    private static func gauge(title: String, percent: Int?, caption: String?, past: Bool) -> NSMenuItem {
+    private static func gauge(title: String, percent: Int?, caption: String?, past: Bool, color: NSColor = .controlAccentColor) -> NSMenuItem {
         let titleLabel = label(title, font: .systemFont(ofSize: 13, weight: .medium))
         let percentLabel = label(percent.map { "\($0)%" } ?? "\u{2013}", font: .monospacedDigitSystemFont(ofSize: 13, weight: .medium))
         percentLabel.textColor = past ? .systemRed : .labelColor
@@ -37,7 +37,7 @@ enum MenuRows {
         titleLabel.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         percentLabel.setContentHuggingPriority(.required, for: .horizontal)
 
-        let bar = BarView(fraction: Double(percent ?? 0) / 100, warning: past)
+        let bar = BarView(fraction: Double(percent ?? 0) / 100, warning: past, color: color)
         bar.heightAnchor.constraint(equalToConstant: 6).isActive = true
 
         var rows: [NSView] = [header, bar]
@@ -188,10 +188,12 @@ final class ActionRowView: NSView {
 final class BarView: NSView {
     private let fraction: Double
     private let warning: Bool
+    private let color: NSColor
 
-    init(fraction: Double, warning: Bool) {
+    init(fraction: Double, warning: Bool, color: NSColor) {
         self.fraction = min(max(fraction, 0), 1)
         self.warning = warning
+        self.color = color
         super.init(frame: .zero)
     }
 
@@ -204,7 +206,7 @@ final class BarView: NSView {
         guard fraction > 0 else { return }
         var fill = bounds
         fill.size.width = max(bounds.height, bounds.width * fraction)
-        (warning ? NSColor.systemRed : NSColor.controlAccentColor).setFill()
+        (warning ? NSColor.systemRed : color).setFill()
         NSBezierPath(roundedRect: fill, xRadius: radius, yRadius: radius).fill()
     }
 }

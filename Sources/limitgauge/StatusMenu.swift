@@ -4,6 +4,7 @@ import LimitGaugeCore
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     private let service: UsageService
+    private let codexService: UsageService
     private let item: NSStatusItem
     private let menu = NSMenu()
     private let warningDot = WarningDotView()
@@ -16,11 +17,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     // menu is open leaves AppKit's layout stale: a blank row under Quit, and Settings
     // shifted out of the icon column.
     private let footerSeparator = NSMenuItem.separator()
-    private let updatedItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let refreshItem = NSMenuItem()
 
-    init(service: UsageService, openSettings: @escaping () -> Void) {
+    init(service: UsageService, codexService: UsageService, openSettings: @escaping () -> Void) {
         self.service = service
+        self.codexService = codexService
         self.openSettings = openSettings
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
@@ -58,6 +59,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         rebuild()
         // Cached rows are already on screen; a stale snapshot refreshes behind them (ADR-0002).
         service.refresh(.menuOpen)
+        codexService.refresh(.menuOpen)
     }
 
     func menuDidClose(_ menu: NSMenu) {
@@ -65,26 +67,19 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     private func addFooter() {
-        updatedItem.isEnabled = false
         let settings = NSMenuItem(title: "Settings\u{2026}", action: #selector(showSettings), keyEquivalent: ",")
         settings.target = self
         let quit = NSMenuItem(title: "Quit limitgauge", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        [footerSeparator, updatedItem, refreshItem, .separator(), settings, quit].forEach(menu.addItem)
+        [footerSeparator, refreshItem, .separator(), settings, quit].forEach(menu.addItem)
     }
 
     private func rebuild() {
         let now = Date()
         replaceContent(with: contentItems(now: now))
 
-        if service.isRefreshing {
-            updatedItem.title = "Updating\u{2026}"
-        } else if let snapshot = service.snapshot {
-            updatedItem.title = "Updated \(ResetText.ago(snapshot.fetchedAt, now: now))"
-        } else {
-            updatedItem.title = "No data yet"
-        }
-        refreshItem.view = MenuRows.action("Refresh", enabled: !service.isRefreshing) { [weak self] in
+        refreshItem.view = MenuRows.action("Refresh", enabled: !service.isRefreshing && !codexService.isRefreshing) { [weak self] in
             self?.service.refresh(.refreshRow)
+            self?.codexService.refresh(.refreshRow)
         }
     }
 
@@ -112,10 +107,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         var items: [NSMenuItem] = []
         let thresholds = Settings.thresholds
 
-        if let plan = service.plan {
-            items.append(MenuRows.keyValue("Plan", plan.displayName, quiet: true))
-            items.append(.separator())
-        }
+        items.append(providerHeader("Claude", service: service, now: now))
+        items.append(.separator())
 
         if let problem = service.problem, service.snapshot == nil {
             items.append(MenuRows.message(problem.message))
@@ -128,7 +121,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 items.append(MenuRows.unreadableSession())
             }
             for limit in snapshot.limits {
-                items.append(MenuRows.limit(limit, state: thresholds.state(of: limit, at: now), now: now))
+                items.append(MenuRows.limit(limit, state: thresholds.state(of: limit, at: now), now: now, color: Settings.claudeColor.color))
             }
 
             var extras: [NSMenuItem] = []
@@ -163,7 +156,24 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 items.append(MenuRows.message(problem.message))
             }
         }
+        items.append(.separator())
+        items.append(providerHeader("Codex", service: codexService, now: now))
+        if let snapshot = codexService.snapshot {
+            for limit in snapshot.limits {
+                items.append(MenuRows.limit(limit, state: Settings.codexThresholds.state(of: limit, at: now), now: now,
+                                            color: Settings.codexColor.color))
+            }
+        }
+        if let problem = codexService.problem {
+            items.append(MenuRows.message(problem.message))
+        }
         return items
+    }
+
+    private func providerHeader(_ name: String, service: UsageService, now: Date) -> NSMenuItem {
+        var detail = service.snapshot.map { "Updated \(ResetText.ago($0.fetchedAt, now: now))" } ?? "No data yet"
+        if service.isRefreshing { detail += " · Updating…" }
+        return MenuRows.keyValue(name, service.plan?.displayName ?? "", detail: detail, quiet: true)
     }
 
     @objc private func showSettings() {
@@ -174,7 +184,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         item.button?.image = StatusIcon.image(for: Settings.icon)
         let now = Date()
         let thresholds = Settings.thresholds
-        let reset = service.snapshot.flatMap { thresholds.earliestPastReset(in: $0, at: now) }
+        let claudeReset = service.snapshot.flatMap { thresholds.earliestPastReset(in: $0, at: now) }
+        let codexReset = codexService.snapshot.flatMap { Settings.codexThresholds.earliestPastReset(in: $0, at: now) }
+        let reset = [claudeReset, codexReset].compactMap { $0 }.min()
         warningDot.isHidden = !(reset != nil && Settings.showsWarningDot)
 
         redrawAtPastReset?.invalidate()

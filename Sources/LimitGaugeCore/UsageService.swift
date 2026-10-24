@@ -32,11 +32,10 @@ public enum RefreshOutcome: Equatable, Sendable {
     case skipped
 }
 
-/// Keeps the usage numbers current and warns about them. One refresh, from any trigger, runs
-/// the whole sequence: read the token off the main actor, fetch with ADR-0001's one re-read on
-/// 401, fetch the plan with the token that worked, store the result, log a failure once,
-/// deliver due warnings, then tell the app. Callers say why they want a refresh and read the
-/// state; they never sequence any of that themselves.
+/// Keeps one provider's usage current and warns about it. Both sources share caching,
+/// persistence, headroom pacing, failure backoff and delivery tracking. Claude retains its
+/// read-only token/retry sequence; Codex delegates account access to its local app server.
+/// Callers say why they want a refresh and read the state; they never sequence the work.
 @MainActor
 public final class UsageService {
     public static let staleAfter: TimeInterval = 120
@@ -75,8 +74,11 @@ public final class UsageService {
     /// Refresh still read. Cleared by any read that ends otherwise.
     private var refusedRead: UsageProblem?
 
-    private let readToken: TokenReader
-    private let fetcher: any UsageFetching
+    private enum Source {
+        case claude(TokenReader, any UsageFetching)
+        case codex(@Sendable () async throws(CodexUsageError) -> CodexUsageReading)
+    }
+    private let source: Source
     private let store: SnapshotStore
     private let delivery: any WarningDelivery
     private let thresholds: @MainActor () -> WarningThresholds
@@ -84,7 +86,7 @@ public final class UsageService {
     var deliveryTimeout: Duration = .seconds(10)
 
     /// Snapshot, plan and posted warnings load from `store`, the one place they persist.
-    public init(
+    public convenience init(
         readToken: @escaping TokenReader,
         fetcher: any UsageFetching,
         store: SnapshotStore,
@@ -92,8 +94,25 @@ public final class UsageService {
         thresholds: @escaping @MainActor () -> WarningThresholds,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
-        self.readToken = readToken
-        self.fetcher = fetcher
+        self.init(source: .claude(readToken, fetcher), store: store, delivery: delivery,
+                  thresholds: thresholds, now: now)
+    }
+
+    public convenience init(
+        readCodex: @escaping @Sendable () async throws(CodexUsageError) -> CodexUsageReading,
+        store: SnapshotStore,
+        delivery: any WarningDelivery,
+        thresholds: @escaping @MainActor () -> WarningThresholds,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.init(source: .codex(readCodex), store: store, delivery: delivery,
+                  thresholds: thresholds, now: now)
+    }
+
+    private init(source: Source, store: SnapshotStore, delivery: any WarningDelivery,
+                 thresholds: @escaping @MainActor () -> WarningThresholds,
+                 now: @escaping @Sendable () -> Date) {
+        self.source = source
         self.store = store
         self.delivery = delivery
         self.thresholds = thresholds
@@ -151,15 +170,31 @@ public final class UsageService {
     private func perform(_ reason: RefreshReason) async -> RefreshOutcome {
         let started = now()
         let outcome: RefreshOutcome
-        do {
-            let working = try await fetchUsage(reason)
+        do throws(RefreshFailure) {
+            switch source {
+            case .claude(let readToken, let fetcher):
+                let working = try await fetchUsage(reason, readToken: readToken, fetcher: fetcher)
+                if let snapshot { store.save(snapshot: snapshot) }
+                if let plan = await planIfStale(token: working, fetcher: fetcher) {
+                    fetchedPlan = plan
+                    store.save(plan: plan)
+                }
+            case .codex(let read):
+                do throws(CodexUsageError) {
+                    let reading = try await read()
+                    snapshot = reading.snapshot
+                    store.save(snapshot: reading.snapshot)
+                    if let plan = reading.plan {
+                        let fetched = FetchedPlan(plan: plan, fetchedAt: reading.snapshot.fetchedAt)
+                        fetchedPlan = fetched
+                        store.save(plan: fetched)
+                    }
+                } catch {
+                    throw RefreshFailure(problem: .codex(error), logDescription: "Codex: \(error)")
+                }
+            }
             failures = nil
             rejectedToken = nil
-            if let snapshot { store.save(snapshot: snapshot) }
-            if let plan = await planIfStale(token: working) {
-                fetchedPlan = plan
-                store.save(plan: plan)
-            }
             outcome = .fetched
         } catch {
             let streak = failures?.next(error.problem, at: started, pollSentNothing: error.pollSentNothing)
@@ -177,11 +212,11 @@ public final class UsageService {
     /// ADR-0001: read the token; on 401 re-read once and retry once if it changed. Stores the
     /// snapshot and returns the token that succeeded, so the plan never goes out with a
     /// rejected one.
-    private func fetchUsage(_ reason: RefreshReason) async throws(RefreshFailure) -> AccessToken {
+    private func fetchUsage(_ reason: RefreshReason, readToken: TokenReader, fetcher: any UsageFetching) async throws(RefreshFailure) -> AccessToken {
         if reason == .poll, let refusedRead {
             throw .readStillRefused(refusedRead)
         }
-        let token = try await read()
+        let token = try await read(readToken)
         // A poll exists only for warnings, and a rejected token cannot produce any.
         if reason == .poll, token == rejectedToken {
             throw .tokenStillRejected
@@ -191,7 +226,7 @@ public final class UsageService {
             return token
         } catch .unauthorized {
             // Claude Code may have rotated the token since the read. One re-read, one retry.
-            let fresh = try await read()
+            let fresh = try await read(readToken)
             guard fresh != token else {
                 rejectedToken = token
                 throw .tokenUnchanged
@@ -211,7 +246,7 @@ public final class UsageService {
     }
 
     /// Reads the token, and remembers a refused or timed-out read for the next poll.
-    private func read() async throws(RefreshFailure) -> AccessToken {
+    private func read(_ readToken: TokenReader) async throws(RefreshFailure) -> AccessToken {
         do {
             let token = try await readToken()
             refusedRead = nil
@@ -228,7 +263,7 @@ public final class UsageService {
 
     /// The plan row is secondary: a failure keeps the old value, sets no problem, and logs at
     /// debug level only.
-    private func planIfStale(token: AccessToken) async -> FetchedPlan? {
+    private func planIfStale(token: AccessToken, fetcher: any UsageFetching) async -> FetchedPlan? {
         if let fetchedPlan, now().timeIntervalSince(fetchedPlan.fetchedAt) < Self.planMaxAge { return nil }
         do {
             return FetchedPlan(plan: try await fetcher.fetchPlan(token: token), fetchedAt: now())
